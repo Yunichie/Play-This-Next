@@ -91,7 +91,7 @@ TASK: Recommend 3-5 games from the user's backlog that best match their request.
 3. What they liked/disliked in other games
 4. Estimated playtime (HLTB data provided)
 
-Return ONLY valid JSON in this exact format (no markdown, no extra text):
+Return ONLY valid JSON in this exact format (no codeblock, no extra text):
 {
   "recommendations": [
     {

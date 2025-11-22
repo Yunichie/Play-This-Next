@@ -10,6 +10,7 @@ import {
 import { SyncLibraryButton } from "@/components/settings/sync-library-button";
 import { ExportDataButton } from "@/components/settings/export-data-button";
 import { DeleteAccountButton } from "@/components/settings/delete-account-button";
+import { LinkSteamButton } from "@/components/settings/link-steam-button";
 import { Gamepad2 } from "lucide-react";
 
 export default async function SettingsPage() {
@@ -36,7 +37,7 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      {}
+      {/* Account Information */}
       <Card>
         <CardHeader>
           <CardTitle>Account Information</CardTitle>
@@ -50,13 +51,10 @@ export default async function SettingsPage() {
             <p className="text-lg">{profile?.username || "Not set"}</p>
           </div>
 
-          {profile?.steamid && (
+          {session.user.email && (
             <div>
-              <p className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Gamepad2 className="w-4 h-4" />
-                Steam ID
-              </p>
-              <p className="text-lg font-mono">{profile.steamid}</p>
+              <p className="text-sm font-medium text-muted-foreground">Email</p>
+              <p className="text-lg">{session.user.email}</p>
             </div>
           )}
 
@@ -79,35 +77,48 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      {}
+      {/* Steam Integration */}
       <Card>
         <CardHeader>
-          <CardTitle>Steam Library</CardTitle>
-          <CardDescription>Sync your Steam games</CardDescription>
+          <CardTitle className="flex items-center gap-2">
+            <Gamepad2 className="w-5 h-5" />
+            Steam Integration
+          </CardTitle>
+          <CardDescription>
+            Connect your Steam account to sync your library
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {profile?.steamid ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
-                <div className="w-2 h-2 rounded-full bg-green-600 dark:bg-green-400" />
-                Steam account connected
-              </div>
-              <SyncLibraryButton />
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                No Steam account connected. Link your Steam account to sync your
-                library automatically.
-              </p>
-              {/* TODO: implement Steam OAuth flow */}
-              <p className="text-sm text-muted-foreground">
-                Steam integration requires Steam Web API authentication.
-              </p>
-            </div>
-          )}
+          <LinkSteamButton steamid={profile?.steamid || null} />
         </CardContent>
       </Card>
+
+      {/* Library Sync */}
+      {profile?.steamid && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Library Sync</CardTitle>
+            <CardDescription>
+              Sync your Steam games and playtime data
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              <p className="mb-2">
+                Click below to sync your latest game library from Steam. This
+                will:
+              </p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>Update playtime for all games</li>
+                <li>Add any new games to your library</li>
+                <li>Update recently played information</li>
+                <li>Fetch completion time estimates (HLTB)</li>
+              </ul>
+            </div>
+            <SyncLibraryButton />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Data Management */}
       <Card>

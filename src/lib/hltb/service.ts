@@ -1,6 +1,6 @@
-import { HowLongToBeatService, HowLongToBeatEntry } from "howlongtobeat";
+const { HowLongToBeat } = require("howlongtobeat-js");
 
-const hltbService = new HowLongToBeatService();
+const hltbService = new HowLongToBeat();
 
 export interface HLTBData {
   main: number;
