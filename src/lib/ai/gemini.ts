@@ -128,7 +128,7 @@ export async function streamAIChat(
   topGenres: { genre: string; playtime: number }[],
 ): Promise<ReadableStream> {
   const model = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash-8b",
+    model: "gemini-2.5-flash",
     generationConfig: {
       temperature: 0.8,
       topP: 0.9,

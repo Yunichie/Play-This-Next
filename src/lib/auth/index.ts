@@ -8,53 +8,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
   session: {
     strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60,
   },
   providers: [
     Credentials({
-      name: "Steam",
-      id: "steam",
-      credentials: {
-        steamid: { label: "Steam ID", type: "text" },
-        username: { label: "Username", type: "text" },
-        avatar: { label: "Avatar", type: "text" },
-      },
-      async authorize(credentials) {
-        const parsedCredentials = z
-          .object({
-            steamid: z.string(),
-            username: z.string(),
-            avatar: z.string().optional(),
-          })
-          .safeParse(credentials);
-
-        if (parsedCredentials.success) {
-          const { steamid, username, avatar } = parsedCredentials.data;
-
-          const supabase = await createClient();
-
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select()
-            .eq("steamid", steamid)
-            .single();
-
-          if (profile) {
-            return {
-              id: profile.user_id,
-              name: username,
-              image: avatar,
-              steamid,
-            };
-          }
-
-          return null;
-        }
-        return null;
-      },
-    }),
-    Credentials({
-      name: "Email",
-      id: "email",
+      name: "credentials",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
@@ -67,9 +25,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           })
           .safeParse(credentials);
 
-        if (parsedCredentials.success) {
-          const { email, password } = parsedCredentials.data;
+        if (!parsedCredentials.success) {
+          return null;
+        }
 
+        const { email, password } = parsedCredentials.data;
+
+        try {
           const supabase = await createClient();
           const { data, error } = await supabase.auth.signInWithPassword({
             email,
@@ -77,27 +39,41 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           });
 
           if (error || !data.user) {
+            console.error("Auth error:", error);
             return null;
+          }
+
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select()
+            .eq("user_id", data.user.id)
+            .single();
+
+          if (!profile) {
+            await supabase.from("profiles").insert({
+              user_id: data.user.id,
+              username: email.split("@")[0],
+            });
           }
 
           return {
             id: data.user.id,
             email: data.user.email,
-            name: data.user.user_metadata?.username || email,
+            name: profile?.username || email.split("@")[0],
           };
+        } catch (error) {
+          console.error("Authorization error:", error);
+          return null;
         }
-        return null;
       },
     }),
   ],
   callbacks: {
-    ...authConfig.callbacks,
-    async jwt({ token, user, account }) {
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.email = user.email;
         token.name = user.name;
-        token.steamid = (user as any).steamid;
       }
       return token;
     },
@@ -106,9 +82,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.id = token.id as string;
         session.user.email = token.email as string;
         session.user.name = token.name as string;
-        (session.user as any).steamid = token.steamid;
       }
       return session;
     },
+    async authorized({ auth }) {
+      return !!auth?.user;
+    },
   },
+  pages: {
+    signIn: "/login",
+  },
+  debug: process.env.NODE_ENV === "development",
 });

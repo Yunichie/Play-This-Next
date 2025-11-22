@@ -2,33 +2,40 @@ import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 export default auth((req) => {
-  const isLoggedIn = !!req.auth?.user;
   const { pathname } = req.nextUrl;
 
-  const isOnLogin = pathname.startsWith("/login");
-  const isOnPublicRoute =
-    pathname === "/" ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/api");
-
-  if (isOnPublicRoute && !pathname.startsWith("/api/auth")) {
-    if (pathname === "/" && !isLoggedIn) {
-      return NextResponse.redirect(new URL("/login", req.nextUrl));
-    }
+  if (pathname.startsWith("/api")) {
     return NextResponse.next();
   }
 
-  if (!isLoggedIn && !isOnLogin) {
-    return NextResponse.redirect(new URL("/login", req.nextUrl));
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon.ico") ||
+    pathname.includes(".")
+  ) {
+    return NextResponse.next();
   }
 
+  const isLoggedIn = !!req.auth?.user;
+  const isOnLogin = pathname === "/login";
+
+  console.log("Middleware check:", { pathname, isLoggedIn, isOnLogin });
+
   if (isLoggedIn && isOnLogin) {
+    console.log("Redirecting logged-in user from /login to /");
     return NextResponse.redirect(new URL("/", req.nextUrl));
+  }
+
+  if (!isLoggedIn && !isOnLogin) {
+    console.log("Redirecting non-logged-in user to /login");
+    return NextResponse.redirect(new URL("/login", req.nextUrl));
   }
 
   return NextResponse.next();
 });
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };

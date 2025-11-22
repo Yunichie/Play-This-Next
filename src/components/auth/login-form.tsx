@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import {
   Card,
   CardContent,
@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useRouter } from "next/navigation";
 
 const emailSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -53,35 +54,48 @@ export function LoginForm() {
     setLoading(true);
     try {
       const supabase = createClient();
+      const { data: authData, error: supabaseError } =
+        await supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password,
+        });
 
-      const { data: authData, error } = await supabase.auth.signInWithPassword({
-        email: data.email,
-        password: data.password,
-      });
-
-      if (error) {
-        toast.error(error.message);
+      if (supabaseError || !authData.user) {
+        toast.error("Invalid email or password");
+        setLoading(false);
         return;
       }
 
-      if (authData.user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select()
-          .eq("user_id", authData.user.id)
-          .single();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select()
+        .eq("user_id", authData.user.id)
+        .single();
 
-        if (!profile) {
-          await supabase.from("profiles").insert({
-            user_id: authData.user.id,
-            username: data.email.split("@")[0],
-          });
-        }
-
-        toast.success("Welcome back!");
-        window.location.href = "/";
+      if (!profile) {
+        await supabase.from("profiles").insert({
+          user_id: authData.user.id,
+          username: data.email.split("@")[0],
+        });
       }
+
+      const result = await signIn("credentials", {
+        email: data.email,
+        password: data.password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        toast.error("Authentication failed");
+        setLoading(false);
+        return;
+      }
+
+      toast.success("Welcome back!");
+      router.push("/");
+      router.refresh();
     } catch (error) {
+      console.error("Login error:", error);
       toast.error("Failed to sign in");
     } finally {
       setLoading(false);
@@ -100,6 +114,7 @@ export function LoginForm() {
 
       if (error) {
         toast.error(error.message);
+        setLoading(false);
         return;
       }
 
@@ -109,50 +124,54 @@ export function LoginForm() {
           username: data.email.split("@")[0],
         });
 
-        toast.success("Account created! You can now sign in.");
-        signupForm.reset();
+        const result = await signIn("credentials", {
+          email: data.email,
+          password: data.password,
+          redirect: false,
+        });
+
+        if (result?.error) {
+          toast.error(
+            "Account created but login failed. Please try logging in.",
+          );
+          setLoading(false);
+          return;
+        }
+
+        toast.success("Account created successfully!");
+        router.push("/");
+        router.refresh();
       }
     } catch (error) {
+      console.error("Signup error:", error);
       toast.error("Failed to create account");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSteamLogin = () => {
+    window.location.href = "/api/auth/steam";
+  };
+
   return (
-    <Card>
+    <Card className="border-border/50">
       <CardHeader>
         <CardTitle>Sign In</CardTitle>
         <CardDescription>Choose your preferred sign-in method</CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="steam" className="w-full">
+        <Tabs defaultValue="email" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="steam">
-              <Gamepad2 className="w-4 h-4 mr-2" />
-              Steam
-            </TabsTrigger>
             <TabsTrigger value="email">
               <Mail className="w-4 h-4 mr-2" />
               Email
             </TabsTrigger>
+            <TabsTrigger value="steam">
+              <Gamepad2 className="w-4 h-4 mr-2" />
+              Steam
+            </TabsTrigger>
           </TabsList>
-
-          <TabsContent value="steam" className="space-y-4">
-            <div className="text-center py-6">
-              <p className="text-sm text-muted-foreground mb-4">
-                Sign in with your Steam account to automatically sync your
-                library
-              </p>
-              <Button className="w-full" size="lg" disabled>
-                <Gamepad2 className="w-5 h-5 mr-2" />
-                Sign in with Steam
-              </Button>
-              <p className="text-xs text-muted-foreground mt-2">
-                Steam OAuth requires configuration
-              </p>
-            </div>
-          </TabsContent>
 
           <TabsContent value="email">
             <Tabs defaultValue="login">
@@ -258,6 +277,24 @@ export function LoginForm() {
                 </form>
               </TabsContent>
             </Tabs>
+          </TabsContent>
+
+          <TabsContent value="steam" className="space-y-4">
+            <div className="text-center py-6">
+              <p className="text-sm text-muted-foreground mb-4">
+                Sign in with your Steam account to automatically sync your
+                library
+              </p>
+              <Button
+                className="w-full bg-[#171a21] hover:bg-[#1b2838] text-white"
+                size="lg"
+                onClick={handleSteamLogin}
+                disabled={loading}
+              >
+                <Gamepad2 className="w-5 h-5 mr-2" />
+                Sign in with Steam
+              </Button>
+            </div>
           </TabsContent>
         </Tabs>
       </CardContent>

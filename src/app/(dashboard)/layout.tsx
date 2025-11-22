@@ -9,7 +9,10 @@ export default async function DashboardLayout({
 }) {
   const session = await auth();
 
+  console.log("Dashboard layout - session:", session?.user?.id);
+
   if (!session?.user?.id) {
+    console.log("No session found, redirecting to login");
     redirect("/login");
   }
 
