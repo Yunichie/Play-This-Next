@@ -17,11 +17,15 @@ interface GameCardProps {
 }
 
 const statusColors = {
-  backlog: "bg-orange-500/10 text-orange-500 border-orange-500/20",
-  playing: "bg-green-500/10 text-green-500 border-green-500/20",
-  completed: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-  dropped: "bg-red-500/10 text-red-500 border-red-500/20",
-  shelved: "bg-gray-500/10 text-gray-500 border-gray-500/20",
+  backlog:
+    "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
+  playing:
+    "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
+  completed:
+    "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
+  dropped: "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20",
+  shelved:
+    "bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-500/20",
 };
 
 export function GameCard({ game, onClick }: GameCardProps) {
@@ -44,67 +48,87 @@ export function GameCard({ game, onClick }: GameCardProps) {
 
   return (
     <motion.div
-      whileHover={{ y: -4 }}
-      transition={{ type: "spring", stiffness: 300 }}
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      whileHover={{ y: -8, scale: 1.02 }}
+      transition={{
+        type: "spring",
+        stiffness: 300,
+        damping: 20,
+      }}
     >
       <Card
-        className="overflow-hidden cursor-pointer hover:shadow-xl transition-shadow group"
+        className="overflow-hidden cursor-pointer group elevated border-border/50 bg-card/50 backdrop-blur-sm"
         onClick={onClick}
       >
-        <div className="relative aspect-[16/9]">
-          <img
+        <div className="relative aspect-[16/9] overflow-hidden bg-muted">
+          <motion.img
             src={game.img_url || "/placeholder-game.jpg"}
             alt={game.name}
-            className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+            className="object-cover w-full h-full"
+            whileHover={{ scale: 1.1 }}
+            transition={{ duration: 0.4 }}
           />
 
           {}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
 
           {}
-          <button
+          <motion.button
             onClick={handleFavoriteClick}
-            className="absolute top-2 right-2 p-2 rounded-full bg-black/50 backdrop-blur-sm hover:bg-black/70 transition-colors z-10"
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            className="absolute top-3 right-3 p-2.5 rounded-full glass z-10 hover:bg-white/20 transition-all"
           >
             <Heart
-              className={`w-5 h-5 ${
-                game.is_favorite ? "fill-red-500 text-red-500" : "text-white"
-              }`}
+              className={cn(
+                "w-4 h-4 transition-all",
+                game.is_favorite
+                  ? "fill-rose-500 text-rose-500 drop-shadow-lg"
+                  : "text-white",
+              )}
             />
-          </button>
+          </motion.button>
 
           {}
-          <div className="absolute top-2 left-2">
-            <span
-              className={`inline-block px-2 py-1 text-xs font-medium rounded border ${
-                statusColors[game.status]
-              }`}
+          <div className="absolute top-3 left-3">
+            <motion.span
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className={cn(
+                "inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-lg border backdrop-blur-sm",
+                statusColors[game.status],
+              )}
             >
               {game.status.charAt(0).toUpperCase() + game.status.slice(1)}
-            </span>
+            </motion.span>
           </div>
 
-          {}
-          <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
-            <h3 className="font-semibold text-white line-clamp-1 text-sm">
+          {/* Info Overlay */}
+          <div className="absolute inset-x-0 bottom-0 p-4 space-y-3">
+            <h3 className="font-semibold text-white line-clamp-1 text-base drop-shadow-lg">
               {game.name}
             </h3>
 
-            <div className="flex items-center justify-between text-xs text-white/80">
-              <div className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                <span>{formatPlaytime(game.playtime_forever)}</span>
+            <div className="flex items-center gap-4 text-xs text-white/90">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg glass">
+                <Clock className="w-3.5 h-3.5" />
+                <span className="font-medium">
+                  {formatPlaytime(game.playtime_forever)}
+                </span>
               </div>
 
               {game.user_rating !== null && (
-                <div className="flex items-center gap-1">
-                  <Star className="w-3 h-3 fill-yellow-500 text-yellow-500" />
-                  <span>{game.user_rating}/10</span>
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg glass">
+                  <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  <span className="font-medium">{game.user_rating}/10</span>
                 </div>
               )}
 
               {game.hltb_main && (
-                <div className="text-white/60">~{game.hltb_main}h to beat</div>
+                <div className="px-2 py-1 rounded-lg glass text-white/80 font-medium">
+                  ~{game.hltb_main}h
+                </div>
               )}
             </div>
           </div>
@@ -112,4 +136,8 @@ export function GameCard({ game, onClick }: GameCardProps) {
       </Card>
     </motion.div>
   );
+}
+
+function cn(...classes: string[]) {
+  return classes.filter(Boolean).join(" ");
 }

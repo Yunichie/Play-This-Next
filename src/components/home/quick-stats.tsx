@@ -25,31 +25,36 @@ export function QuickStats({
       title: "Total Games",
       value: totalGames,
       icon: Library,
-      gradient: "from-blue-500 to-cyan-500",
+      color: "text-blue-600 dark:text-blue-400",
+      bgColor: "bg-blue-500/10",
     },
     {
       title: "Total Playtime",
       value: formatPlaytime(totalPlaytime),
       icon: Clock,
-      gradient: "from-purple-500 to-pink-500",
+      color: "text-purple-600 dark:text-purple-400",
+      bgColor: "bg-purple-500/10",
     },
     {
       title: "Backlog",
       value: backlogCount,
       icon: ListTodo,
-      gradient: "from-orange-500 to-red-500",
+      color: "text-amber-600 dark:text-amber-400",
+      bgColor: "bg-amber-500/10",
     },
     {
-      title: "Currently Playing",
+      title: "Playing",
       value: playingCount,
       icon: Gamepad2,
-      gradient: "from-green-500 to-emerald-500",
+      color: "text-emerald-600 dark:text-emerald-400",
+      bgColor: "bg-emerald-500/10",
     },
     {
       title: "Completed",
       value: completedCount,
       icon: CheckCircle2,
-      gradient: "from-indigo-500 to-purple-500",
+      color: "text-indigo-600 dark:text-indigo-400",
+      bgColor: "bg-indigo-500/10",
     },
   ];
 
@@ -62,20 +67,36 @@ export function QuickStats({
             key={stat.title}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
+            transition={{
+              delay: index * 0.1,
+              type: "spring",
+              stiffness: 300,
+              damping: 20,
+            }}
           >
-            <Card className="relative overflow-hidden">
+            <Card className="relative overflow-hidden glass border-border/50 hover:shadow-lg transition-all group">
               <div
-                className={`absolute inset-0 bg-gradient-to-br ${stat.gradient} opacity-5`}
+                className={`absolute inset-0 ${stat.bgColor} opacity-0 group-hover:opacity-100 transition-opacity`}
               />
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Icon className="w-4 h-4" />
+              <CardHeader className="pb-2 relative">
+                <div
+                  className={`inline-flex p-2.5 rounded-xl ${stat.bgColor} w-fit mb-2`}
+                >
+                  <Icon className={`w-5 h-5 ${stat.color}`} />
+                </div>
+                <CardTitle className="text-xs font-medium text-muted-foreground">
                   {stat.title}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
+              <CardContent className="relative">
+                <motion.div
+                  className="text-3xl font-bold tracking-tight"
+                  initial={{ scale: 0.5 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: index * 0.1 + 0.2, type: "spring" }}
+                >
+                  {stat.value}
+                </motion.div>
               </CardContent>
             </Card>
           </motion.div>

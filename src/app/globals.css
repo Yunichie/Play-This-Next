@@ -23,15 +23,15 @@
         --border: 240 5.9% 90%;
         --input: 240 5.9% 90%;
         --ring: 240 5.9% 10%;
-        --radius: 0.5rem;
+        --radius: 0.75rem;
     }
 
     .dark {
         --background: 240 10% 3.9%;
         --foreground: 0 0% 98%;
-        --card: 240 8% 6%;
+        --card: 240 10% 5%;
         --card-foreground: 0 0% 98%;
-        --popover: 240 8% 6%;
+        --popover: 240 10% 5%;
         --popover-foreground: 0 0% 98%;
         --primary: 0 0% 98%;
         --primary-foreground: 240 5.9% 10%;
@@ -71,21 +71,91 @@
 }
 
 ::-webkit-scrollbar-thumb {
-    @apply bg-muted rounded-full;
+    @apply bg-muted-foreground/20 rounded-full;
+    transition: background-color 0.2s;
 }
 
 ::-webkit-scrollbar-thumb:hover {
     @apply bg-muted-foreground/30;
 }
 
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: -1000px 0;
+    }
+    100% {
+        background-position: 1000px 0;
+    }
+}
+
+.animate-fadeIn {
+    animation: fadeIn 0.5s ease-out;
+}
+
+.animate-slideIn {
+    animation: slideIn 0.5s ease-out;
+}
+
+.animate-scaleIn {
+    animation: scaleIn 0.3s ease-out;
+}
+
 .glass {
-    @apply backdrop-blur-xl bg-card/70 border border-border/50;
+    @apply backdrop-blur-xl bg-card/80 border border-border/50;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
+}
+
+.elevated {
+    box-shadow:
+        0 1px 2px 0 rgba(0, 0, 0, 0.05),
+        0 8px 24px -4px rgba(0, 0, 0, 0.08);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.elevated:hover {
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.08),
+        0 20px 40px -8px rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
 }
 
 .gradient-subtle {
     background: linear-gradient(
         135deg,
-        hsl(var(--primary)) 0%,
+        hsl(var(--background)) 0%,
         hsl(var(--muted)) 100%
     );
 }
@@ -93,15 +163,34 @@
 .gradient-accent {
     background: linear-gradient(
         135deg,
-        hsl(var(--accent)) 0%,
-        hsl(var(--muted)) 100%
+        hsl(var(--primary) / 0.1) 0%,
+        hsl(var(--primary) / 0.05) 100%
     );
 }
 
-* {
-    @apply transition-colors duration-200;
+.transition-smooth {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-:focus-visible {
-    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+.shimmer {
+    background: linear-gradient(
+        90deg,
+        hsl(var(--muted)) 0%,
+        hsl(var(--muted-foreground) / 0.1) 50%,
+        hsl(var(--muted)) 100%
+    );
+    background-size: 1000px 100%;
+    animation: shimmer 2s infinite linear;
+}
+
+.focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
+}
+
+.interactive {
+    @apply transition-smooth hover:scale-[1.02] active:scale-[0.98];
+}
+
+.text-gradient {
+    @apply bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent;
 }

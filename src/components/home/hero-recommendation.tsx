@@ -1,15 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Clock, RefreshCw } from "lucide-react";
+import { Sparkles, Clock, RefreshCw, TrendingUp } from "lucide-react";
 import { getRecommendations } from "@/app/actions/ai";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -41,23 +35,37 @@ export function HeroRecommendation() {
   };
 
   return (
-    <Card className="overflow-hidden border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-purple-500/5">
+    <Card className="relative overflow-hidden glass border-border/50 bg-gradient-to-br from-primary/5 via-card/50 to-accent/5 backdrop-blur-sm">
+      <div className="absolute inset-0 bg-grid-pattern opacity-5" />
+
       <CardHeader>
         <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <CardTitle className="text-2xl flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <motion.div
+              initial={{ rotate: 0 }}
+              animate={{ rotate: loading ? 360 : 0 }}
+              transition={{
+                duration: 2,
+                repeat: loading ? Infinity : 0,
+                ease: "linear",
+              }}
+              className="p-3 rounded-2xl bg-primary/10"
+            >
               <Sparkles className="w-6 h-6 text-primary" />
-              AI Recommendation
-            </CardTitle>
-            <CardDescription>
-              Your personalized pick based on your gaming profile
-            </CardDescription>
+            </motion.div>
+            <div>
+              <CardTitle className="text-2xl">AI Recommendation</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Personalized pick from your library
+              </p>
+            </div>
           </div>
           <Button
             onClick={handleGetRecommendation}
             disabled={loading}
             size="sm"
             variant="outline"
+            className="rounded-full border-border/50"
           >
             <RefreshCw
               className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`}
@@ -67,31 +75,41 @@ export function HeroRecommendation() {
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="relative">
         <AnimatePresence mode="wait">
           {!recommendation && !loading && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              key="empty"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
               className="text-center py-12"
             >
-              <p className="text-muted-foreground mb-4">
-                Click the button above to get your first AI-powered
-                recommendation!
+              <div className="inline-flex p-4 rounded-2xl bg-muted/50 mb-4">
+                <Sparkles className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <p className="text-muted-foreground">
+                Click above to get your first AI-powered recommendation!
               </p>
             </motion.div>
           )}
 
           {loading && (
             <motion.div
+              key="loading"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="text-center py-12"
             >
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              <p className="text-muted-foreground mt-4">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                className="inline-block mb-4"
+              >
+                <Sparkles className="w-8 h-8 text-primary" />
+              </motion.div>
+              <p className="text-muted-foreground">
                 Analyzing your gaming preferences...
               </p>
             </motion.div>
@@ -99,39 +117,64 @@ export function HeroRecommendation() {
 
           {recommendation && !loading && (
             <motion.div
+              key="recommendation"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="space-y-4"
+              className="space-y-6"
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <h3 className="text-2xl font-bold mb-2">
-                    {recommendation.name}
-                  </h3>
-                  <p className="text-muted-foreground mb-4">
-                    {recommendation.reasoning}
-                  </p>
+              <div>
+                <h3 className="text-3xl font-bold mb-3">
+                  {recommendation.name}
+                </h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  {recommendation.reasoning}
+                </p>
+              </div>
 
-                  <div className="flex flex-wrap gap-4 text-sm">
-                    {recommendation.estimatedPlaytime && (
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Clock className="w-4 h-4" />
-                        <span>{recommendation.estimatedPlaytime}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <div className="h-2 w-24 bg-muted rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full"
-                          style={{ width: `${recommendation.matchScore}%` }}
-                        />
-                      </div>
-                      <span className="text-primary font-medium">
-                        {recommendation.matchScore}% match
-                      </span>
-                    </div>
-                  </div>
+              <div className="flex flex-wrap gap-3">
+                {recommendation.estimatedPlaytime && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.1 }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-full glass border border-border/50"
+                  >
+                    <Clock className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-medium">
+                      {recommendation.estimatedPlaytime}
+                    </span>
+                  </motion.div>
+                )}
+
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20"
+                >
+                  <TrendingUp className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-bold text-primary">
+                    {recommendation.matchScore}% match
+                  </span>
+                </motion.div>
+              </div>
+
+              {/* Match Score Bar */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Match Score</span>
+                  <span className="font-bold text-primary">
+                    {recommendation.matchScore}%
+                  </span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${recommendation.matchScore}%` }}
+                    transition={{ delay: 0.3, duration: 1, ease: "easeOut" }}
+                    className="h-full bg-gradient-to-r from-primary to-primary/60 rounded-full"
+                  />
                 </div>
               </div>
             </motion.div>
