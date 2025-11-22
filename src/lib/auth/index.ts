@@ -8,11 +8,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60,
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   providers: [
     Credentials({
-      name: "credentials",
+      name: "Email",
+      id: "credentials",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
@@ -43,13 +44,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return null;
           }
 
-          const { data: profile } = await supabase
+          const { data: profile, error: profileError } = await supabase
             .from("profiles")
             .select()
             .eq("user_id", data.user.id)
             .single();
 
-          if (!profile) {
+          if (profileError) {
             await supabase.from("profiles").insert({
               user_id: data.user.id,
               username: email.split("@")[0],
@@ -58,8 +59,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
           return {
             id: data.user.id,
-            email: data.user.email,
+            email: data.user.email!,
             name: profile?.username || email.split("@")[0],
+            image: profile?.avatar_url,
           };
         } catch (error) {
           console.error("Authorization error:", error);
@@ -69,12 +71,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.email = user.email;
         token.name = user.name;
+        token.picture = user.image;
       }
+
+      if (trigger === "update" && session) {
+        token = { ...token, ...session };
+      }
+
       return token;
     },
     async session({ session, token }) {
@@ -82,15 +90,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.id = token.id as string;
         session.user.email = token.email as string;
         session.user.name = token.name as string;
+        session.user.image = token.picture as string;
       }
       return session;
     },
-    async authorized({ auth }) {
-      return !!auth?.user;
-    },
   },
-  pages: {
-    signIn: "/login",
-  },
-  debug: process.env.NODE_ENV === "development",
+  debug: true,
 });

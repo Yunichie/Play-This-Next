@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -13,12 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Gamepad2, Mail, AlertCircle } from "lucide-react";
+import { Gamepad2, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { signIn } from "next-auth/react";
 
 const emailSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -37,26 +38,9 @@ const signupSchema = emailSchema
 type EmailFormData = z.infer<typeof emailSchema>;
 type SignupFormData = z.infer<typeof signupSchema>;
 
-const ERROR_MESSAGES: Record<string, string> = {
-  steam_init_failed: "Failed to initialize Steam login. Please try again.",
-  invalid_state: "Security validation failed. Please try again.",
-  steam_validation_failed: "Steam login validation failed. Please try again.",
-  steam_user_fetch_failed: "Failed to fetch Steam profile. Please try again.",
-  not_authenticated: "You must be logged in to link a Steam account.",
-  steam_already_linked: "This Steam account is already linked to another user.",
-  link_failed: "Failed to link Steam account. Please try again.",
-  callback_failed: "Steam login failed. Please try again.",
-  auth_failed: "Authentication failed. Please try again.",
-  user_creation_failed: "Failed to create user account. Please try again.",
-  auth_data_missing: "Authentication data missing. Please try again.",
-  signin_failed: "Sign-in failed. Please try again.",
-};
-
 export function LoginForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
-  const [steamLoading, setSteamLoading] = useState(false);
 
   const loginForm = useForm<EmailFormData>({
     resolver: zodResolver(emailSchema),
@@ -66,65 +50,25 @@ export function LoginForm() {
     resolver: zodResolver(signupSchema),
   });
 
-  useEffect(() => {
-    const error = searchParams.get("error");
-    const success = searchParams.get("success");
-
-    if (error && ERROR_MESSAGES[error]) {
-      toast.error(ERROR_MESSAGES[error]);
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete("error");
-      window.history.replaceState({}, "", newUrl.toString());
-    }
-
-    if (success === "steam_linked") {
-      toast.success("Steam account linked successfully!");
-    }
-  }, [searchParams]);
-
-  const handleSteamLogin = async () => {
-    setSteamLoading(true);
-    try {
-      window.location.href = "/api/auth/steam";
-    } catch (error) {
-      toast.error("Failed to initiate Steam login");
-      setSteamLoading(false);
-    }
-  };
-
   const handleEmailLogin = async (data: EmailFormData) => {
     setLoading(true);
     try {
-      const supabase = createClient();
-
-      const { data: authData, error } = await supabase.auth.signInWithPassword({
+      const result = await signIn("credentials", {
         email: data.email,
         password: data.password,
+        redirect: false,
       });
 
-      if (error) {
-        toast.error(error.message);
+      if (result?.error) {
+        toast.error("Invalid credentials");
         return;
       }
 
-      if (authData.user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select()
-          .eq("user_id", authData.user.id)
-          .single();
-
-        if (!profile) {
-          await supabase.from("profiles").insert({
-            user_id: authData.user.id,
-            username: data.email.split("@")[0],
-          });
-        }
-
-        toast.success("Welcome back!");
-        window.location.href = "/";
-      }
+      toast.success("Welcome back!");
+      router.push("/");
+      router.refresh();
     } catch (error) {
+      console.error("Login error:", error);
       toast.error("Failed to sign in");
     } finally {
       setLoading(false);
@@ -152,10 +96,11 @@ export function LoginForm() {
           username: data.email.split("@")[0],
         });
 
-        toast.success("Account created! You can now sign in.");
+        toast.success("Account created! Please sign in.");
         signupForm.reset();
       }
     } catch (error) {
+      console.error("Signup error:", error);
       toast.error("Failed to create account");
     } finally {
       setLoading(false);
@@ -169,51 +114,17 @@ export function LoginForm() {
         <CardDescription>Choose your preferred sign-in method</CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="steam" className="w-full">
+        <Tabs defaultValue="email" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="steam">
-              <Gamepad2 className="w-4 h-4 mr-2" />
-              Steam
-            </TabsTrigger>
             <TabsTrigger value="email">
               <Mail className="w-4 h-4 mr-2" />
               Email
             </TabsTrigger>
+            <TabsTrigger value="steam" disabled>
+              <Gamepad2 className="w-4 h-4 mr-2" />
+              Steam
+            </TabsTrigger>
           </TabsList>
-
-          <TabsContent value="steam" className="space-y-4">
-            <div className="text-center py-6">
-              <p className="text-sm text-muted-foreground mb-4">
-                Sign in with your Steam account to automatically sync your
-                library
-              </p>
-              <Button
-                className="w-full"
-                size="lg"
-                onClick={handleSteamLogin}
-                disabled={steamLoading}
-              >
-                <Gamepad2 className="w-5 h-5 mr-2" />
-                {steamLoading ? "Connecting to Steam..." : "Sign in with Steam"}
-              </Button>
-              <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-                <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                  <div className="text-left">
-                    <p className="font-medium mb-1">Privacy & Security:</p>
-                    <ul className="space-y-1 list-disc list-inside">
-                      <li>
-                        We only access your public Steam profile and game
-                        library
-                      </li>
-                      <li>Your Steam credentials are never stored</li>
-                      <li>Authentication is handled securely by Steam</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </TabsContent>
 
           <TabsContent value="email">
             <Tabs defaultValue="login">
@@ -260,10 +171,6 @@ export function LoginForm() {
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Signing in..." : "Sign In"}
                   </Button>
-
-                  <p className="text-xs text-center text-muted-foreground">
-                    You can link your Steam account after signing in
-                  </p>
                 </form>
               </TabsContent>
 
@@ -320,13 +227,21 @@ export function LoginForm() {
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Creating account..." : "Create Account"}
                   </Button>
-
-                  <p className="text-xs text-center text-muted-foreground">
-                    You can link your Steam account after signing up
-                  </p>
                 </form>
               </TabsContent>
             </Tabs>
+          </TabsContent>
+
+          <TabsContent value="steam" className="space-y-4">
+            <div className="text-center py-6">
+              <p className="text-sm text-muted-foreground mb-4">
+                Steam OAuth integration coming soon
+              </p>
+              <Button className="w-full" size="lg" disabled>
+                <Gamepad2 className="w-5 h-5 mr-2" />
+                Sign in with Steam
+              </Button>
+            </div>
           </TabsContent>
         </Tabs>
       </CardContent>

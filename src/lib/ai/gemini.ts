@@ -31,9 +31,9 @@ export async function getAIRecommendations(
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
       generationConfig: {
-        temperature: 0.8,
-        topP: 0.9,
-        maxOutputTokens: 2048,
+        temperature: 0.7,
+        topP: 0.95,
+        responseMimeType: "application/json",
       },
     });
 
@@ -46,76 +46,88 @@ export async function getAIRecommendations(
       )
       .join(", ");
 
-    const favoriteGenres = topGenres
-      .slice(0, 5)
-      .map((g) => `${g.genre} (${Math.round(g.playtime / 60)}h)`)
-      .join(", ");
-
-    const likedAspects = userGames
-      .flatMap((g) => g.liked_aspects || [])
-      .filter((v, i, a) => a.indexOf(v) === i)
-      .slice(0, 10)
-      .join(", ");
-
-    const dislikedAspects = userGames
-      .flatMap((g) => g.disliked_aspects || [])
-      .filter((v, i, a) => a.indexOf(v) === i)
-      .slice(0, 10)
-      .join(", ");
-
     const backlogGames = userGames
       .filter((g) => g.status === "backlog" || g.playtime < 60)
       .map((g) => ({
         name: g.name,
         appid: g.appid,
         hltb: g.hltb_main || 0,
+        playtime: Math.round(g.playtime / 60),
       }));
 
-    const prompt = `You are an expert game recommendation assistant for Steam libraries.
+    if (backlogGames.length === 0) {
+      return [];
+    }
 
-USER'S GAMING PROFILE:
-- Most Played Games: ${mostPlayedGames || "None yet"}
-- Favorite Genres: ${favoriteGenres || "Not enough data"}
-- Liked Aspects: ${likedAspects || "Not specified"}
-- Disliked Aspects: ${dislikedAspects || "Not specified"}
-- Total Games in Library: ${userGames.length}
+    const prompt = `You are a game recommendation assistant. Analyze the user's gaming profile and recommend games from their backlog.
 
-USER'S REQUEST: "${userQuery}"
+USER PROFILE:
+- Most Played: ${mostPlayedGames || "None"}
+- Total Games: ${userGames.length}
 
-AVAILABLE BACKLOG GAMES (games user owns but hasn't played much):
-${backlogGames.map((g) => `- ${g.name} (appid: ${g.appid}, ~${g.hltb || "?"}h to beat)`).join("\n")}
+USER REQUEST: "${userQuery}"
 
-TASK: Recommend 3-5 games from the user's backlog that best match their request. Consider:
-1. The user's query (mood, time available, preferred genre, etc.)
-2. Their favorite genres and most played games
-3. What they liked/disliked in other games
-4. Estimated playtime (HLTB data provided)
+AVAILABLE BACKLOG (unplayed/barely played games):
+${backlogGames
+  .slice(0, 20)
+  .map(
+    (g) =>
+      `- ${g.name} (ID: ${g.appid}, ~${g.hltb || "?"}h to beat, ${g.playtime}h played)`,
+  )
+  .join("\n")}
 
-Return ONLY valid JSON in this exact format (no codeblock, no extra text):
+INSTRUCTIONS:
+1. Recommend 3-5 games from the backlog that match the user's request
+2. Consider their playtime preferences and request context
+3. Return ONLY valid JSON with this structure:
+
 {
   "recommendations": [
     {
       "appid": 123456,
       "name": "Game Name",
-      "reasoning": "Why this game fits the request (2-3 sentences)",
+      "reasoning": "Brief explanation why this fits (1-2 sentences)",
       "estimatedPlaytime": "10-15 hours",
-      "matchScore": 95
+      "matchScore": 85
     }
   ]
 }
 
-CRITICAL: Only recommend games from the backlog list above. Match score should be 0-100.`;
+Match scores should be realistic (60-95 range). Only recommend from the backlog list above.`;
 
     const result = await model.generateContent(prompt);
     const response = result.response.text();
 
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("Invalid JSON response from AI");
-    }
+    try {
+      const parsed = JSON.parse(response);
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    return parsed.recommendations || [];
+      if (!parsed.recommendations || !Array.isArray(parsed.recommendations)) {
+        console.error("Invalid response structure:", parsed);
+        return [];
+      }
+
+      const validRecs = parsed.recommendations.filter(
+        (rec: any) =>
+          rec.appid &&
+          rec.name &&
+          rec.reasoning &&
+          rec.matchScore >= 0 &&
+          rec.matchScore <= 100,
+      );
+
+      return validRecs.slice(0, 5);
+    } catch (parseError) {
+      console.error("Failed to parse AI response:", response);
+      console.error("Parse error:", parseError);
+
+      const jsonMatch = response.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[1]);
+        return parsed.recommendations || [];
+      }
+
+      return [];
+    }
   } catch (error) {
     console.error("Error getting AI recommendations:", error);
     throw error;
