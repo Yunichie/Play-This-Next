@@ -1,14 +1,12 @@
-import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
-export default auth((req) => {
-  const { pathname } = req.nextUrl;
-
-  if (pathname.startsWith("/api")) {
-    return NextResponse.next();
-  }
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
 
   if (
+    pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon.ico") ||
     pathname.includes(".")
@@ -16,23 +14,51 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  const isLoggedIn = !!req.auth?.user;
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value);
+            response.cookies.set(name, value, options);
+          });
+        },
+      },
+    },
+  );
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const isLoggedIn = !!session?.user;
   const isOnLogin = pathname === "/login";
 
   console.log("Middleware check:", { pathname, isLoggedIn, isOnLogin });
 
   if (isLoggedIn && isOnLogin) {
     console.log("Redirecting logged-in user from /login to /");
-    return NextResponse.redirect(new URL("/", req.nextUrl));
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   if (!isLoggedIn && !isOnLogin) {
     console.log("Redirecting non-logged-in user to /login");
-    return NextResponse.redirect(new URL("/login", req.nextUrl));
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  return NextResponse.next();
-});
+  return response;
+}
 
 export const config = {
   matcher: [

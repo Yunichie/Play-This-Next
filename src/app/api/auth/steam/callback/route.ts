@@ -1,4 +1,3 @@
-// src/app/api/auth/steam/callback/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import {
   validateSteamLogin,
@@ -7,18 +6,21 @@ import {
 } from "@/lib/steam/openid";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { auth, signIn } from "@/lib/auth";
+
+function getSteamPassword(steamId: string): string {
+  const secret =
+    process.env.NEXTAUTH_SECRET || "fallback-secret-change-in-production";
+  return `steam_${steamId}_${secret}`.substring(0, 72); // PostgreSQL max password length
+}
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const cookieStore = await cookies();
 
-    // Get state from cookie and URL
     const sessionState = cookieStore.get("steam_auth_state")?.value;
     const urlState = searchParams.get("state");
 
-    // Verify CSRF state
     if (!sessionState || !urlState || !verifyState(urlState, sessionState)) {
       console.error("State verification failed");
       return NextResponse.redirect(
@@ -26,13 +28,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Convert search params to a plain object
     const params: Record<string, string> = {};
     searchParams.forEach((value, key) => {
       params[key] = value;
     });
 
-    // Validate Steam OpenID response
     const steamId = await validateSteamLogin(params);
 
     if (!steamId) {
@@ -42,7 +42,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get Steam user details
     const steamUser = await getSteamUserDetails(steamId);
 
     if (!steamUser) {
@@ -52,170 +51,103 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check if this is a linking operation
     const isLinking = cookieStore.get("steam_is_linking")?.value === "true";
-    const callbackUrl = cookieStore.get("steam_callback_url")?.value || "/";
 
-    // Clean up cookies
     cookieStore.delete("steam_auth_state");
     cookieStore.delete("steam_callback_url");
     cookieStore.delete("steam_is_linking");
 
     const supabase = await createClient();
 
+    const { data: existingProfile, error: profileCheckError } = await supabase
+      .from("profiles")
+      .select("user_id, username")
+      .eq("steamid", steamId)
+      .single();
+
+    if (profileCheckError && profileCheckError.code !== "PGRST116") {
+      console.error("Error checking profile:", profileCheckError);
+      return NextResponse.redirect(
+        new URL("/login?error=profile_check_failed", request.url),
+      );
+    }
+
     if (isLinking) {
-      // Link Steam account to existing user
-      const session = await auth();
-
-      if (!session?.user?.id) {
-        return NextResponse.redirect(
-          new URL("/login?error=not_authenticated", request.url),
+      if (existingProfile) {
+        console.log(
+          "Steam account already linked to user:",
+          existingProfile.user_id,
         );
-      }
-
-      // Check if Steam ID is already linked to another account
-      const { data: existingProfile } = await supabase
-        .from("profiles")
-        .select("user_id")
-        .eq("steamid", steamId)
-        .single();
-
-      if (existingProfile && existingProfile.user_id !== session.user.id) {
         return NextResponse.redirect(
           new URL("/settings?error=steam_already_linked", request.url),
         );
       }
 
-      // Update user's profile with Steam ID
-      const { error: updateError } = await supabase
-        .from("profiles")
-        .update({
-          steamid: steamId,
-          username: steamUser.personaname,
-          avatar_url: steamUser.avatarfull,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", session.user.id);
+      return NextResponse.redirect(new URL("/settings", request.url));
+    }
 
-      if (updateError) {
-        console.error("Error linking Steam account:", updateError);
-        return NextResponse.redirect(
-          new URL("/settings?error=link_failed", request.url),
-        );
-      }
-
-      return NextResponse.redirect(
-        new URL("/settings?success=steam_linked", request.url),
+    if (existingProfile) {
+      console.log(
+        "Steam login - existing user found:",
+        existingProfile.user_id,
       );
-    } else {
-      // Regular Steam login
-      // Check if profile exists
-      const { data: existingProfile } = await supabase
-        .from("profiles")
-        .select("user_id")
-        .eq("steamid", steamId)
-        .single();
 
-      if (existingProfile) {
-        // User exists, sign them in
-        // We'll use a custom credential flow
-        const response = NextResponse.redirect(
-          new URL(callbackUrl, request.url),
-        );
+      const email = `steam_${steamId}@playthisnext.app`;
+      const password = getSteamPassword(steamId);
 
-        // Store Steam auth data in a temporary cookie for the auth callback
-        cookieStore.set(
-          "steam_auth_data",
-          JSON.stringify({
-            steamid: steamId,
-            username: steamUser.personaname,
-            avatar: steamUser.avatarfull,
-          }),
-          {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            maxAge: 60, // 1 minute
-            path: "/",
-          },
-        );
-
-        return NextResponse.redirect(
-          new URL("/api/auth/steam/signin", request.url),
-        );
-      } else {
-        // New user, create profile
-        // First, create or get Supabase auth user
-        const { data: authData, error: authError } = await supabase.auth.signUp(
-          {
-            email: `steam_${steamId}@playthisnext.app`,
-            password: crypto.randomUUID(),
-            options: {
-              data: {
-                steamid: steamId,
-                username: steamUser.personaname,
-              },
-            },
-          },
-        );
-
-        if (authError || !authData.user) {
-          // Try to sign in if user already exists
-          const { data: signInData, error: signInError } =
-            await supabase.auth.signInWithPassword({
-              email: `steam_${steamId}@playthisnext.app`,
-              password: crypto.randomUUID(),
-            });
-
-          if (signInError) {
-            console.error("Error creating/signing in user:", signInError);
-            return NextResponse.redirect(
-              new URL("/login?error=auth_failed", request.url),
-            );
-          }
-        }
-
-        const userId = authData?.user?.id;
-
-        if (!userId) {
-          return NextResponse.redirect(
-            new URL("/login?error=user_creation_failed", request.url),
-          );
-        }
-
-        // Create profile
-        const { error: profileError } = await supabase.from("profiles").insert({
-          user_id: userId,
-          steamid: steamId,
-          username: steamUser.personaname,
-          avatar_url: steamUser.avatarfull,
+      const { data: signInData, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email: email,
+          password: password,
         });
 
-        if (profileError) {
-          console.error("Error creating profile:", profileError);
-        }
-
-        // Store Steam auth data for signin
-        cookieStore.set(
-          "steam_auth_data",
-          JSON.stringify({
-            steamid: steamId,
-            username: steamUser.personaname,
-            avatar: steamUser.avatarfull,
-          }),
-          {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            maxAge: 60,
-            path: "/",
-          },
-        );
-
+      if (signInError) {
+        console.error("Sign in error for existing user:", signInError);
         return NextResponse.redirect(
-          new URL("/api/auth/steam/signin", request.url),
+          new URL("/login?error=signin_failed", request.url),
         );
       }
+
+      if (!signInData.session) {
+        return NextResponse.redirect(
+          new URL("/login?error=no_session", request.url),
+        );
+      }
+
+      const response = NextResponse.redirect(new URL("/", request.url));
+
+      response.cookies.set({
+        name: "sb-access-token",
+        value: signInData.session.access_token,
+        path: "/",
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 7,
+      });
+
+      response.cookies.set({
+        name: "sb-refresh-token",
+        value: signInData.session.refresh_token,
+        path: "/",
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+
+      return response;
+    } else {
+      console.log(
+        "Steam account not linked. Redirecting to manual account creation.",
+      );
+
+      return NextResponse.redirect(
+        new URL(
+          `/login?error=steam_not_linked&steam_name=${encodeURIComponent(steamUser.personaname)}`,
+          request.url,
+        ),
+      );
     }
   } catch (error) {
     console.error("Error in Steam callback:", error);

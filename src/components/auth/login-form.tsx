@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -40,7 +40,27 @@ type SignupFormData = z.infer<typeof signupSchema>;
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
+
+  // Check for Steam errors on mount
+  useEffect(() => {
+    const error = searchParams.get("error");
+    const steamName = searchParams.get("steam_name");
+
+    if (error === "steam_not_linked" && steamName) {
+      toast.error(
+        `This Steam account (${steamName}) is not linked to any account. Please create an account manually first, then link your Steam account in Settings.`,
+        {
+          duration: 8000,
+        },
+      );
+    } else if (error === "steam_already_linked") {
+      toast.error("This Steam account is already linked to another account.", {
+        duration: 5000,
+      });
+    }
+  }, [searchParams]);
 
   const loginForm = useForm<EmailFormData>({
     resolver: zodResolver(emailSchema),
@@ -107,6 +127,10 @@ export function LoginForm() {
     }
   };
 
+  const handleSteamLogin = () => {
+    window.location.href = "/api/auth/steam";
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -120,7 +144,7 @@ export function LoginForm() {
               <Mail className="w-4 h-4 mr-2" />
               Email
             </TabsTrigger>
-            <TabsTrigger value="steam" disabled>
+            <TabsTrigger value="steam">
               <Gamepad2 className="w-4 h-4 mr-2" />
               Steam
             </TabsTrigger>
@@ -233,11 +257,26 @@ export function LoginForm() {
           </TabsContent>
 
           <TabsContent value="steam" className="space-y-4">
-            <div className="text-center py-6">
-              <p className="text-sm text-muted-foreground mb-4">
-                Steam OAuth integration coming soon
+            <div className="text-center py-6 space-y-4">
+              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm">
+                <p className="font-medium text-amber-700 dark:text-amber-400 mb-2">
+                  ⚠️ Important: Steam Login Requirements
+                </p>
+                <p className="text-muted-foreground text-left">
+                  To sign in with Steam, you must first:
+                </p>
+                <ol className="text-left text-muted-foreground list-decimal list-inside mt-2 space-y-1">
+                  <li>Create an account using Email & Password</li>
+                  <li>Sign in to your account</li>
+                  <li>Go to Settings and link your Steam account</li>
+                  <li>Then you can use Steam login</li>
+                </ol>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                Sign in with your Steam account (must be already linked)
               </p>
-              <Button className="w-full" size="lg" disabled>
+              <Button className="w-full" size="lg" onClick={handleSteamLogin}>
                 <Gamepad2 className="w-5 h-5 mr-2" />
                 Sign in with Steam
               </Button>

@@ -1,10 +1,25 @@
+import { Suspense } from "react";
 import { LoginForm } from "@/components/auth/login-form";
 import { Gamepad2 } from "lucide-react";
+
+function LoginFormWrapper() {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full max-w-md">
+          <div className="h-96 bg-card rounded-lg animate-pulse" />
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
+  );
+}
 
 export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4 relative overflow-hidden">
-      {/* Animated Background Elements */}
+      {}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-pulse" />
         <div
@@ -36,7 +51,7 @@ export default function LoginPage() {
         </div>
 
         {}
-        <LoginForm />
+        <LoginFormWrapper />
 
         {}
         <p className="text-center text-sm text-muted-foreground">
