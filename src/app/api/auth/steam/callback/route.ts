@@ -8,9 +8,8 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 
 function getSteamPassword(steamId: string): string {
-  const secret =
-    process.env.NEXTAUTH_SECRET || "fallback-secret-change-in-production";
-  return `steam_${steamId}_${secret}`.substring(0, 72); // PostgreSQL max password length
+  const secret = process.env.AUTH_SECRET;
+  return `steam_${steamId}_${secret}`.substring(0, 72);
 }
 
 export async function GET(request: NextRequest) {
@@ -63,7 +62,7 @@ export async function GET(request: NextRequest) {
       .from("profiles")
       .select("user_id, username")
       .eq("steamid", steamId)
-      .single();
+      .maybeSingle();
 
     if (profileCheckError && profileCheckError.code !== "PGRST116") {
       console.error("Error checking profile:", profileCheckError);
@@ -73,9 +72,19 @@ export async function GET(request: NextRequest) {
     }
 
     if (isLinking) {
-      if (existingProfile) {
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
+
+      if (!currentUser) {
+        return NextResponse.redirect(
+          new URL("/login?error=not_authenticated", request.url),
+        );
+      }
+
+      if (existingProfile && existingProfile.user_id !== currentUser.id) {
         console.log(
-          "Steam account already linked to user:",
+          "Steam account already linked to another user:",
           existingProfile.user_id,
         );
         return NextResponse.redirect(
@@ -83,7 +92,32 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      return NextResponse.redirect(new URL("/settings", request.url));
+      if (existingProfile && existingProfile.user_id === currentUser.id) {
+        return NextResponse.redirect(
+          new URL("/settings?error=steam_already_linked_to_you", request.url),
+        );
+      }
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({
+          steamid: steamId,
+          username: steamUser.personaname,
+          avatar_url: steamUser.avatarfull,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", currentUser.id);
+
+      if (updateError) {
+        console.error("Error linking Steam account:", updateError);
+        return NextResponse.redirect(
+          new URL("/settings?error=link_failed", request.url),
+        );
+      }
+
+      return NextResponse.redirect(
+        new URL("/settings?steam_link=success", request.url),
+      );
     }
 
     if (existingProfile) {
@@ -137,18 +171,81 @@ export async function GET(request: NextRequest) {
       });
 
       return response;
-    } else {
-      console.log(
-        "Steam account not linked. Redirecting to manual account creation.",
-      );
+    }
 
+    console.log("Creating new account for Steam user:", steamId);
+
+    const email = `steam_${steamId}@playthisnext.app`;
+    const password = getSteamPassword(steamId);
+
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp(
+      {
+        email: email,
+        password: password,
+      },
+    );
+
+    if (signUpError || !signUpData.user) {
+      console.error("Sign up error:", signUpError);
       return NextResponse.redirect(
-        new URL(
-          `/login?error=steam_not_linked&steam_name=${encodeURIComponent(steamUser.personaname)}`,
-          request.url,
-        ),
+        new URL("/login?error=signup_failed", request.url),
       );
     }
+
+    const { error: profileError } = await supabase.from("profiles").upsert(
+      {
+        user_id: signUpData.user.id,
+        steamid: steamId,
+        username: steamUser.personaname,
+        avatar_url: steamUser.avatarfull,
+        total_games: 0,
+        total_playtime: 0,
+      },
+      {
+        onConflict: "user_id",
+      },
+    );
+
+    if (profileError) {
+      console.error("Error creating profile:", profileError);
+    }
+
+    const { data: signInData, error: signInError } =
+      await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
+
+    if (signInError || !signInData.session) {
+      console.error("Sign in error after signup:", signInError);
+      return NextResponse.redirect(
+        new URL("/login?error=signin_after_signup_failed", request.url),
+      );
+    }
+
+    const response = NextResponse.redirect(new URL("/", request.url));
+
+    response.cookies.set({
+      name: "sb-access-token",
+      value: signInData.session.access_token,
+      path: "/",
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    response.cookies.set({
+      name: "sb-refresh-token",
+      value: signInData.session.refresh_token,
+      path: "/",
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+
+    return response;
   } catch (error) {
     console.error("Error in Steam callback:", error);
     return NextResponse.redirect(

@@ -13,13 +13,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Gamepad2, Mail } from "lucide-react";
+import { Gamepad2, Mail, AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { signIn } from "next-auth/react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const emailSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -43,7 +44,7 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
 
-  // Check for Steam errors on mount
+  // Check for errors on mount
   useEffect(() => {
     const error = searchParams.get("error");
     const steamName = searchParams.get("steam_name");
@@ -59,8 +60,28 @@ export function LoginForm() {
       toast.error("This Steam account is already linked to another account.", {
         duration: 5000,
       });
+    } else if (error === "invalid_state") {
+      toast.error("Security validation failed. Please try again.");
+    } else if (error === "steam_validation_failed") {
+      toast.error("Failed to validate Steam login. Please try again.");
+    } else if (error === "steam_user_fetch_failed") {
+      toast.error("Failed to fetch Steam profile. Please try again.");
+    } else if (error === "signin_failed") {
+      toast.error("Failed to sign in. Please try again.");
+    } else if (error === "signup_failed") {
+      toast.error("Failed to create account. Please try again.");
+    } else if (error === "callback_failed") {
+      toast.error("Authentication failed. Please try again.");
     }
-  }, [searchParams]);
+
+    // Clear error params
+    if (error) {
+      const params = new URLSearchParams(searchParams);
+      params.delete("error");
+      params.delete("steam_name");
+      router.replace(`/login?${params.toString()}`);
+    }
+  }, [searchParams, router]);
 
   const loginForm = useForm<EmailFormData>({
     resolver: zodResolver(emailSchema),
@@ -257,29 +278,39 @@ export function LoginForm() {
           </TabsContent>
 
           <TabsContent value="steam" className="space-y-4">
-            <div className="text-center py-6 space-y-4">
-              <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm">
-                <p className="font-medium text-amber-700 dark:text-amber-400 mb-2">
-                  ⚠️ Important: Steam Login Requirements
-                </p>
-                <p className="text-muted-foreground text-left">
-                  To sign in with Steam, you must first:
-                </p>
-                <ol className="text-left text-muted-foreground list-decimal list-inside mt-2 space-y-1">
-                  <li>Create an account using Email & Password</li>
-                  <li>Sign in to your account</li>
-                  <li>Go to Settings and link your Steam account</li>
-                  <li>Then you can use Steam login</li>
-                </ol>
-              </div>
+            <div className="space-y-4 py-4">
+              <Alert className="bg-blue-500/10 border-blue-500/20">
+                <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertTitle className="text-blue-700 dark:text-blue-400">
+                  Sign in with Steam
+                </AlertTitle>
+                <AlertDescription className="text-muted-foreground">
+                  <p className="mb-2">When you sign in with Steam:</p>
+                  <ul className="list-disc list-inside space-y-1 text-sm">
+                    <li>
+                      If your Steam account is not linked, we'll create a new
+                      account for you
+                    </li>
+                    <li>
+                      If your Steam account is already linked, you'll be signed
+                      in automatically
+                    </li>
+                    <li>Your Steam library will be available for syncing</li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
 
-              <p className="text-sm text-muted-foreground">
-                Sign in with your Steam account (must be already linked)
-              </p>
               <Button className="w-full" size="lg" onClick={handleSteamLogin}>
                 <Gamepad2 className="w-5 h-5 mr-2" />
-                Sign in with Steam
+                Continue with Steam
               </Button>
+
+              <div className="text-xs text-muted-foreground text-center">
+                <p>
+                  By signing in with Steam, you agree to link your Steam account
+                  to Play This Next.
+                </p>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
