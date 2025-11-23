@@ -10,11 +10,13 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  Gamepad2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { signOut } from "next-auth/react";
+import { useState, createContext, useContext } from "react";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
@@ -24,86 +26,115 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function Sidebar() {
-  const pathname = usePathname();
+const SidebarContext = createContext<{
+  collapsed: boolean;
+  setCollapsed: (value: boolean) => void;
+}>({
+  collapsed: false,
+  setCollapsed: () => {},
+});
+
+export function SidebarProvider({ children }: { children: React.ReactNode }) {
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <aside className="hidden md:flex md:w-72 md:flex-col fixed inset-y-0 z-50">
-      <div className="flex flex-col flex-1 min-h-0 glass border-r">
-        {/* Logo */}
-        <div className="flex items-center gap-3 h-20 px-8 border-b border-border/50">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: "spring", stiffness: 260, damping: 20 }}
-            className="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center"
-          >
-            <Gamepad2 className="w-5 h-5 text-primary-foreground" />
-          </motion.div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">
+    <SidebarContext.Provider value={{ collapsed, setCollapsed }}>
+      {children}
+    </SidebarContext.Provider>
+  );
+}
+
+export function useSidebar() {
+  return useContext(SidebarContext);
+}
+
+export function Sidebar() {
+  const pathname = usePathname();
+  const { collapsed, setCollapsed } = useSidebar();
+
+  return (
+    <aside
+      className={cn(
+        "hidden md:flex md:flex-col fixed inset-y-0 z-50 transition-all duration-300",
+        collapsed ? "md:w-20" : "md:w-64",
+      )}
+    >
+      <div className="flex flex-col flex-1 min-h-0 bg-card border-r border-border">
+        <div className="flex items-center justify-between h-16 px-6 border-b border-border">
+          {!collapsed && (
+            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
               Play This Next
             </h1>
-            <p className="text-xs text-muted-foreground">
-              Your gaming companion
-            </p>
-          </div>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setCollapsed(!collapsed)}
+            className={cn("ml-auto", collapsed && "mx-auto")}
+          >
+            {collapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
+            )}
+          </Button>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {navItems.map((item, index) => {
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {navItems.map((item) => {
             const isActive = pathname === item.href;
             const Icon = item.icon;
 
             return (
-              <motion.div
-                key={item.href}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05 }}
-              >
-                <Link href={item.href}>
-                  <motion.div
-                    whileHover={{ x: 4 }}
-                    whileTap={{ scale: 0.98 }}
+              <Link key={item.href} href={item.href}>
+                <motion.div
+                  whileHover={{ x: 4 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="relative"
+                  title={collapsed ? item.label : undefined}
+                >
+                  <div
                     className={cn(
-                      "relative flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all",
+                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
                       isActive
-                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                      collapsed && "justify-center",
                     )}
                   >
-                    <Icon className="w-5 h-5" />
-                    <span>{item.label}</span>
+                    <Icon className="w-5 h-5 flex-shrink-0" />
+                    {!collapsed && <span>{item.label}</span>}
+                  </div>
 
-                    {isActive && (
-                      <motion.div
-                        layoutId="activeIndicator"
-                        className="absolute right-3 w-1.5 h-6 bg-primary-foreground rounded-full"
-                        transition={{
-                          type: "spring",
-                          stiffness: 380,
-                          damping: 30,
-                        }}
-                      />
-                    )}
-                  </motion.div>
-                </Link>
-              </motion.div>
+                  {isActive && (
+                    <motion.div
+                      layoutId="sidebar-indicator"
+                      className="absolute inset-0 bg-primary rounded-lg -z-10"
+                      transition={{
+                        type: "spring",
+                        bounce: 0.2,
+                        duration: 0.6,
+                      }}
+                    />
+                  )}
+                </motion.div>
+              </Link>
             );
           })}
         </nav>
 
-        {/* Sign Out */}
-        <div className="p-4 border-t border-border/50">
+        <div className="p-3 border-t border-border">
           <Button
             variant="ghost"
-            className="w-full justify-start text-muted-foreground hover:text-foreground transition-smooth"
+            className={cn(
+              "w-full text-muted-foreground",
+              collapsed ? "justify-center px-0" : "justify-start",
+            )}
             onClick={() => signOut()}
+            title={collapsed ? "Sign Out" : undefined}
           >
-            <LogOut className="w-5 h-5 mr-3" />
-            Sign Out
+            <LogOut className="w-5 h-5" />
+            {!collapsed && <span className="ml-3">Sign Out</span>}
           </Button>
         </div>
       </div>
@@ -115,7 +146,7 @@ export function MobileNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass border-t border-border/50 pb-safe">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border">
       <div className="flex items-center justify-around h-16 px-2">
         {navItems.slice(0, 5).map((item) => {
           const isActive = pathname === item.href;
@@ -125,37 +156,34 @@ export function MobileNav() {
             <Link
               key={item.href}
               href={item.href}
-              className="flex flex-col items-center justify-center flex-1 h-full space-y-1 relative"
-            >
-              <motion.div
-                whileTap={{ scale: 0.9 }}
-                className={cn(
-                  "flex flex-col items-center transition-all",
-                  isActive ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                <div
-                  className={cn(
-                    "p-2 rounded-xl transition-all",
-                    isActive && "bg-accent",
-                  )}
-                >
-                  <Icon className="w-5 h-5" />
-                </div>
-                <span className="text-xs font-medium mt-1">{item.label}</span>
-              </motion.div>
-
-              {isActive && (
-                <motion.div
-                  layoutId="mobileActiveIndicator"
-                  className="absolute top-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-primary rounded-full"
-                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                />
+              className={cn(
+                "flex flex-col items-center justify-center flex-1 h-full space-y-1 transition-colors",
+                isActive
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground",
               )}
+            >
+              <Icon className="w-5 h-5" />
+              <span className="text-xs font-medium">{item.label}</span>
             </Link>
           );
         })}
       </div>
     </nav>
+  );
+}
+
+export function MainContent({ children }: { children: React.ReactNode }) {
+  const { collapsed } = useSidebar();
+
+  return (
+    <main
+      className={cn(
+        "flex-1 pb-16 md:pb-0 overflow-y-auto transition-all duration-300",
+        collapsed ? "md:pl-20" : "md:pl-64",
+      )}
+    >
+      <div className="container mx-auto p-4 md:p-8 max-w-7xl">{children}</div>
+    </main>
   );
 }
