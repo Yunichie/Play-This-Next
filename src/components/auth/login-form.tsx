@@ -19,7 +19,6 @@ import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { signIn } from "next-auth/react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const emailSchema = z.object({
@@ -44,41 +43,44 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
 
-  // Check for errors on mount
   useEffect(() => {
     const error = searchParams.get("error");
-    const steamName = searchParams.get("steam_name");
+    const message = searchParams.get("message");
 
-    if (error === "steam_not_linked" && steamName) {
-      toast.error(
-        `This Steam account (${steamName}) is not linked to any account. Please create an account manually first, then link your Steam account in Settings.`,
-        {
-          duration: 8000,
-        },
-      );
-    } else if (error === "steam_already_linked") {
-      toast.error("This Steam account is already linked to another account.", {
-        duration: 5000,
-      });
-    } else if (error === "invalid_state") {
+    if (error === "invalid_state") {
       toast.error("Security validation failed. Please try again.");
     } else if (error === "steam_validation_failed") {
       toast.error("Failed to validate Steam login. Please try again.");
     } else if (error === "steam_user_fetch_failed") {
       toast.error("Failed to fetch Steam profile. Please try again.");
     } else if (error === "signin_failed") {
-      toast.error("Failed to sign in. Please try again.");
+      toast.error("Failed to sign in. Please try logging in with Steam again.");
     } else if (error === "signup_failed") {
       toast.error("Failed to create account. Please try again.");
     } else if (error === "callback_failed") {
       toast.error("Authentication failed. Please try again.");
+    } else if (error === "steam_already_linked") {
+      toast.error("This Steam account is already linked to another account.");
+    } else if (error === "account_exists_contact_support") {
+      toast.error(
+        "Account exists but having trouble signing in. Please contact support.",
+      );
+    } else if (error === "no_session") {
+      toast.error("Failed to create session. Please try again.");
+    } else if (error === "account_exists_signin_failed") {
+      toast.error(
+        "Account exists but couldn't sign in. Please try the Login tab instead.",
+      );
     }
 
-    // Clear error params
-    if (error) {
+    if (message === "account_created_please_signin") {
+      toast.success("Account created! Signing you in...");
+    }
+
+    if (error || message) {
       const params = new URLSearchParams(searchParams);
       params.delete("error");
-      params.delete("steam_name");
+      params.delete("message");
       router.replace(`/login?${params.toString()}`);
     }
   }, [searchParams, router]);
@@ -94,14 +96,21 @@ export function LoginForm() {
   const handleEmailLogin = async (data: EmailFormData) => {
     setLoading(true);
     try {
-      const result = await signIn("credentials", {
-        email: data.email,
-        password: data.password,
-        redirect: false,
-      });
+      const supabase = createClient();
 
-      if (result?.error) {
-        toast.error("Invalid credentials");
+      const { data: signInData, error } =
+        await supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password,
+        });
+
+      if (error) {
+        toast.error(error.message || "Invalid credentials");
+        return;
+      }
+
+      if (!signInData.session) {
+        toast.error("Failed to create session");
         return;
       }
 
@@ -124,6 +133,11 @@ export function LoginForm() {
       const { data: authData, error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
+        options: {
+          data: {
+            username: data.email.split("@")[0],
+          },
+        },
       });
 
       if (error) {
@@ -135,10 +149,25 @@ export function LoginForm() {
         await supabase.from("profiles").insert({
           user_id: authData.user.id,
           username: data.email.split("@")[0],
+          total_games: 0,
+          total_playtime: 0,
         });
 
-        toast.success("Account created! Please sign in.");
-        signupForm.reset();
+        const { data: signInData, error: signInError } =
+          await supabase.auth.signInWithPassword({
+            email: data.email,
+            password: data.password,
+          });
+
+        if (signInError || !signInData.session) {
+          toast.success("Account created! Please sign in.");
+          signupForm.reset();
+          return;
+        }
+
+        toast.success("Account created! Welcome!");
+        router.push("/");
+        router.refresh();
       }
     } catch (error) {
       console.error("Signup error:", error);
@@ -174,8 +203,12 @@ export function LoginForm() {
           <TabsContent value="email">
             <Tabs defaultValue="login">
               <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="login">Login</TabsTrigger>
-                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+                <TabsTrigger value="login" data-steam-login>
+                  Login
+                </TabsTrigger>
+                <TabsTrigger value="signup" data-steam-signup>
+                  Sign Up
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="login">
@@ -216,6 +249,24 @@ export function LoginForm() {
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Signing in..." : "Sign In"}
                   </Button>
+
+                  <div className="text-xs text-center text-muted-foreground">
+                    <p>
+                      Signed up with Steam?{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const steamTab = document.querySelector(
+                            '[value="steam"]',
+                          ) as HTMLElement;
+                          steamTab?.click();
+                        }}
+                        className="text-primary hover:underline"
+                      >
+                        Use Steam login instead
+                      </button>
+                    </p>
+                  </div>
                 </form>
               </TabsContent>
 
@@ -278,40 +329,116 @@ export function LoginForm() {
           </TabsContent>
 
           <TabsContent value="steam" className="space-y-4">
-            <div className="space-y-4 py-4">
-              <Alert className="bg-blue-500/10 border-blue-500/20">
-                <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <AlertTitle className="text-blue-700 dark:text-blue-400">
-                  Sign in with Steam
-                </AlertTitle>
-                <AlertDescription className="text-muted-foreground">
-                  <p className="mb-2">When you sign in with Steam:</p>
-                  <ul className="list-disc list-inside space-y-1 text-sm">
-                    <li>
-                      If your Steam account is not linked, we'll create a new
-                      account for you
-                    </li>
-                    <li>
-                      If your Steam account is already linked, you'll be signed
-                      in automatically
-                    </li>
-                    <li>Your Steam library will be available for syncing</li>
-                  </ul>
-                </AlertDescription>
-              </Alert>
+            <Tabs defaultValue="login">
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="login">Login</TabsTrigger>
+                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              </TabsList>
 
-              <Button className="w-full" size="lg" onClick={handleSteamLogin}>
-                <Gamepad2 className="w-5 h-5 mr-2" />
-                Continue with Steam
-              </Button>
+              <TabsContent value="login">
+                <div className="space-y-4 py-2">
+                  <Alert className="bg-blue-500/10 border-blue-500/20">
+                    <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <AlertTitle className="text-blue-700 dark:text-blue-400">
+                      Login with Steam
+                    </AlertTitle>
+                    <AlertDescription className="text-muted-foreground">
+                      <p className="text-sm">
+                        Sign in to your existing account using your Steam
+                        profile. Only works if you previously signed up with
+                        Steam or linked your Steam account.
+                      </p>
+                    </AlertDescription>
+                  </Alert>
 
-              <div className="text-xs text-muted-foreground text-center">
-                <p>
-                  By signing in with Steam, you agree to link your Steam account
-                  to Play This Next.
-                </p>
-              </div>
-            </div>
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    onClick={handleSteamLogin}
+                  >
+                    <Gamepad2 className="w-5 h-5 mr-2" />
+                    Login with Steam
+                  </Button>
+
+                  <div className="text-xs text-muted-foreground text-center">
+                    <p>
+                      Don't have a Steam account linked?{" "}
+                      <button
+                        onClick={() => {
+                          const signupTab = document.querySelector(
+                            "[data-steam-signup]",
+                          ) as HTMLElement;
+                          signupTab?.click();
+                        }}
+                        className="text-primary hover:underline"
+                      >
+                        Sign up with Steam
+                      </button>
+                    </p>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="signup">
+                <div className="space-y-4 py-2">
+                  <Alert className="bg-green-500/10 border-green-500/20">
+                    <AlertCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <AlertTitle className="text-green-700 dark:text-green-400">
+                      Sign up with Steam
+                    </AlertTitle>
+                    <AlertDescription className="text-muted-foreground">
+                      <p className="mb-2 text-sm">
+                        Create a new Play This Next account using your Steam
+                        profile:
+                      </p>
+                      <ul className="list-disc list-inside space-y-1 text-sm">
+                        <li>Instant account creation</li>
+                        <li>Automatic Steam library sync</li>
+                        <li>Sign in with Steam anytime</li>
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    onClick={handleSteamLogin}
+                    variant="default"
+                  >
+                    <Gamepad2 className="w-5 h-5 mr-2" />
+                    Sign Up with Steam
+                  </Button>
+
+                  <div className="text-xs text-muted-foreground text-center">
+                    <p>
+                      Already have an account?{" "}
+                      <button
+                        onClick={() => {
+                          const loginTab = document.querySelector(
+                            "[data-steam-login]",
+                          ) as HTMLElement;
+                          loginTab?.click();
+                        }}
+                        className="text-primary hover:underline"
+                      >
+                        Login with Steam
+                      </button>
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-muted/50 rounded-lg">
+                    <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                      <p>
+                        By signing up with Steam, you agree to link your Steam
+                        account to Play This Next and accept our Terms of
+                        Service.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         </Tabs>
       </CardContent>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   Home,
@@ -16,8 +16,9 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { signOut } from "next-auth/react";
 import { useState, createContext, useContext } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
@@ -51,7 +52,26 @@ export function useSidebar() {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { collapsed, setCollapsed } = useSidebar();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+
+      toast.success("Signed out successfully");
+      router.push("/login");
+      router.refresh();
+    } catch (error) {
+      console.error("Sign out error:", error);
+      toast.error("Failed to sign out");
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   return (
     <aside
@@ -175,7 +195,8 @@ export function Sidebar() {
                 ? "justify-center px-0 w-14 h-14 mx-auto"
                 : "justify-start",
             )}
-            onClick={() => signOut()}
+            onClick={handleSignOut}
+            disabled={signingOut}
             title={collapsed ? "Sign Out" : undefined}
           >
             <LogOut
@@ -190,7 +211,7 @@ export function Sidebar() {
                   transition={{ duration: 0.2 }}
                   className="ml-3"
                 >
-                  Sign Out
+                  {signingOut ? "Signing out..." : "Sign Out"}
                 </motion.span>
               )}
             </AnimatePresence>

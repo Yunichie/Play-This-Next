@@ -45,15 +45,11 @@ export async function middleware(request: NextRequest) {
   const isLoggedIn = !!session?.user;
   const isOnLogin = pathname === "/login";
 
-  console.log("Middleware check:", { pathname, isLoggedIn, isOnLogin });
-
   if (isLoggedIn && isOnLogin) {
-    console.log("Redirecting logged-in user from /login to /");
     return NextResponse.redirect(new URL("/", request.url));
   }
 
   if (!isLoggedIn && !isOnLogin) {
-    console.log("Redirecting non-logged-in user to /login");
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
