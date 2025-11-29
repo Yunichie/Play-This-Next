@@ -6,10 +6,10 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (
-    pathname.startsWith("/api") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon.ico") ||
-    pathname.includes(".")
+    pathname.includes(".") ||
+    (pathname.startsWith("/api") && !pathname.startsWith("/api/auth"))
   ) {
     return NextResponse.next();
   }
@@ -37,6 +37,8 @@ export async function middleware(request: NextRequest) {
       },
     },
   );
+
+  const cacheKey = `session-${request.cookies.get("sb-access-token")?.value}`;
 
   const {
     data: { session },

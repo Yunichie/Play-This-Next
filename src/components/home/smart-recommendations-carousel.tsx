@@ -17,7 +17,7 @@ import { GameDetailModal } from "@/components/library/game-detail-modal";
 import type { Database } from "@/lib/supabase/database.types";
 import { cn } from "@/lib/utils";
 import {
-  getTop3Recommendations,
+  getCachedTop3Recommendations,
   type TopRecommendation,
 } from "@/app/actions/recommendations";
 import { toast } from "sonner";
@@ -40,7 +40,6 @@ export function SmartRecommendationsCarousel({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Create a map of games by appid for quick lookup
   const gamesMap = new Map(initialGames.map((g) => [g.appid, g]));
 
   const loadRecommendations = async (isRefresh = false) => {
@@ -48,7 +47,7 @@ export function SmartRecommendationsCarousel({
     else setLoading(true);
 
     try {
-      const result = await getTop3Recommendations();
+      const result = await getCachedTop3Recommendations();
 
       if (result.error) {
         toast.error(result.error);
@@ -248,10 +247,8 @@ export function SmartRecommendationsCarousel({
                     transition={{ duration: 0.3 }}
                   />
 
-                  {/* Gradient Overlay */}
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
 
-                  {/* Best Pick Badge */}
                   {currentRec.isBestPick && (
                     <motion.div
                       initial={{ scale: 0, rotate: -180 }}
@@ -266,7 +263,6 @@ export function SmartRecommendationsCarousel({
                     </motion.div>
                   )}
 
-                  {/* Match Score */}
                   <div className="absolute top-4 right-4">
                     <div className="px-3 py-1.5 rounded-full glass border border-white/20 text-white text-sm font-bold flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5" />
@@ -274,7 +270,6 @@ export function SmartRecommendationsCarousel({
                     </div>
                   </div>
 
-                  {/* Game Title */}
                   <div className="absolute inset-x-0 bottom-0 p-6">
                     <h3 className="text-3xl font-bold text-white drop-shadow-lg mb-2">
                       {currentGame.name}
@@ -282,9 +277,7 @@ export function SmartRecommendationsCarousel({
                   </div>
                 </div>
 
-                {/* Details Section */}
                 <CardContent className="p-6 space-y-4 overflow-y-auto max-h-[45%]">
-                  {/* AI Reasoning */}
                   <div className="p-4 rounded-xl bg-primary/5 border border-primary/10">
                     <div className="flex items-start gap-2 mb-2">
                       <Sparkles className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
@@ -297,7 +290,6 @@ export function SmartRecommendationsCarousel({
                     </p>
                   </div>
 
-                  {/* Stats */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/50">
                       <div className="p-2 rounded-lg bg-primary/10">
@@ -353,7 +345,6 @@ export function SmartRecommendationsCarousel({
         </div>
       </div>
 
-      {/* Game Detail Modal */}
       {selectedGame && (
         <GameDetailModal
           game={selectedGame}

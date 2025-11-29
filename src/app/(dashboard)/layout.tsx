@@ -28,3 +28,5 @@ export default async function DashboardLayout({
     </SidebarProvider>
   );
 }
+
+export const dynamic = "force-dynamic";

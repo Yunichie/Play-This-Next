@@ -50,55 +50,72 @@ export async function syncSteamLibrary() {
 
     const { data: existingGames } = await supabase
       .from("user_games")
-      .select("appid")
+      .select("appid, hltb_main, hltb_completionist")
       .eq("user_id", session.user.id);
 
-    const existingAppIds = new Set(existingGames?.map((g) => g.appid) || []);
-
-    const gamesToUpsert = await Promise.all(
-      games.map(async (game) => {
-        let hltbData = null;
-
-        if (!existingAppIds.has(game.appid) || game.playtime_forever > 60) {
-          try {
-            hltbData = await getGamePlaytime(game.name);
-          } catch (e) {
-            console.error(`Failed to get HLTB for ${game.name}`);
-          }
-        }
-
-        return {
-          user_id: session.user.id,
-          appid: game.appid,
-          name: game.name,
-          img_url: getSteamHeaderUrl(game.appid),
-          playtime_forever: game.playtime_forever || 0,
-          playtime_2weeks: game.playtime_2weeks || 0,
-          last_played: game.rtime_last_played
-            ? new Date(game.rtime_last_played * 1000).toISOString()
-            : null,
-          hltb_main: hltbData?.main || null,
-          hltb_completionist: hltbData?.completionist || null,
-        };
-      }),
+    const existingGamesMap = new Map(
+      existingGames?.map((g) => [g.appid, g]) || [],
     );
 
-    const { error: upsertError } = await supabase
-      .from("user_games")
-      .upsert(gamesToUpsert, {
-        onConflict: "user_id,appid",
-        ignoreDuplicates: false,
-      });
+    const BATCH_SIZE = 50;
+    const batches = [];
 
-    if (upsertError) {
-      console.error("Upsert error:", upsertError);
-      return { error: "Failed to sync games" };
+    for (let i = 0; i < games.length; i += BATCH_SIZE) {
+      batches.push(games.slice(i, i + BATCH_SIZE));
+    }
+
+    let processedCount = 0;
+
+    for (const batch of batches) {
+      const gamesToUpsert = await Promise.all(
+        batch.map(async (game) => {
+          const existing = existingGamesMap.get(game.appid);
+          let hltbData = null;
+
+          const shouldFetchHLTB = !existing && game.playtime_forever > 60;
+
+          if (shouldFetchHLTB) {
+            try {
+              hltbData = await getGamePlaytime(game.name);
+            } catch (e) {}
+          }
+
+          return {
+            user_id: session.user.id,
+            appid: game.appid,
+            name: game.name,
+            img_url: getSteamHeaderUrl(game.appid),
+            playtime_forever: game.playtime_forever || 0,
+            playtime_2weeks: game.playtime_2weeks || 0,
+            last_played: game.rtime_last_played
+              ? new Date(game.rtime_last_played * 1000).toISOString()
+              : null,
+            hltb_main: existing?.hltb_main || hltbData?.main || null,
+            hltb_completionist:
+              existing?.hltb_completionist || hltbData?.completionist || null,
+          };
+        }),
+      );
+
+      const { error: upsertError } = await supabase
+        .from("user_games")
+        .upsert(gamesToUpsert, {
+          onConflict: "user_id,appid",
+          ignoreDuplicates: false,
+        });
+
+      if (upsertError) {
+        console.error("Batch upsert error:", upsertError);
+      } else {
+        processedCount += gamesToUpsert.length;
+      }
     }
 
     const totalPlaytime = games.reduce(
       (sum, g) => sum + (g.playtime_forever || 0),
       0,
     );
+
     await supabase
       .from("profiles")
       .update({
@@ -109,8 +126,9 @@ export async function syncSteamLibrary() {
 
     revalidatePath("/library");
     revalidatePath("/");
+    revalidatePath("/stats");
 
-    return { success: true, count: games.length };
+    return { success: true, count: processedCount };
   } catch (error) {
     console.error("Sync error:", error);
     return { error: "Failed to sync library" };
@@ -138,6 +156,7 @@ export async function updateGame(data: z.infer<typeof updateGameSchema>) {
     }
 
     revalidatePath("/library");
+    revalidatePath("/");
     return { success: true };
   } catch (error) {
     console.error("Update error:", error);
