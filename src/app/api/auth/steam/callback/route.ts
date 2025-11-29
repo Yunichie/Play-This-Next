@@ -6,10 +6,22 @@ import {
 } from "@/lib/steam/openid";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import crypto from "crypto";
 
 function getSteamPassword(steamId: string): string {
-  const secret = process.env.AUTH_SECRET;
-  return `steam_${steamId}_${secret}`.substring(0, 72);
+  const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+
+  if (!secret) {
+    console.warn("⚠️ WARNING: AUTH_SECRET not properly configured!");
+  }
+
+  const hash = crypto
+    .createHash("sha256")
+    .update(`steam_${steamId}_${secret}`)
+    .digest("hex")
+    .substring(0, 72);
+
+  return hash;
 }
 
 export async function GET(request: NextRequest) {
@@ -132,10 +144,52 @@ export async function GET(request: NextRequest) {
       if (signInError) {
         console.error("Sign in error for existing user:", signInError);
 
-        if (signInError.message?.includes("already registered")) {
-          return NextResponse.redirect(
-            new URL("/login?error=account_exists_contact_support", request.url),
-          );
+        if (signInError.message?.includes("Invalid login credentials")) {
+          console.log("⚠️ Password mismatch detected - attempting recovery");
+
+          const {
+            data: { user: authUser },
+          } = await supabase.auth.admin.getUserById(existingProfile.user_id);
+
+          if (authUser) {
+            const { error: updateError } =
+              await supabase.auth.admin.updateUserById(authUser.id, {
+                password: password,
+              });
+
+            if (!updateError) {
+              const { data: retrySignIn, error: retryError } =
+                await supabase.auth.signInWithPassword({
+                  email: email,
+                  password: password,
+                });
+
+              if (!retryError && retrySignIn.session) {
+                const response = NextResponse.redirect(
+                  new URL("/", request.url),
+                );
+                response.cookies.set({
+                  name: "sb-access-token",
+                  value: retrySignIn.session.access_token,
+                  path: "/",
+                  httpOnly: true,
+                  secure: process.env.NODE_ENV === "production",
+                  sameSite: "lax",
+                  maxAge: 60 * 60 * 24 * 7,
+                });
+                response.cookies.set({
+                  name: "sb-refresh-token",
+                  value: retrySignIn.session.refresh_token,
+                  path: "/",
+                  httpOnly: true,
+                  secure: process.env.NODE_ENV === "production",
+                  sameSite: "lax",
+                  maxAge: 60 * 60 * 24 * 30,
+                });
+                return response;
+              }
+            }
+          }
         }
 
         return NextResponse.redirect(
@@ -151,7 +205,6 @@ export async function GET(request: NextRequest) {
       }
 
       const response = NextResponse.redirect(new URL("/", request.url));
-
       response.cookies.set({
         name: "sb-access-token",
         value: signInData.session.access_token,
@@ -161,7 +214,6 @@ export async function GET(request: NextRequest) {
         sameSite: "lax",
         maxAge: 60 * 60 * 24 * 7,
       });
-
       response.cookies.set({
         name: "sb-refresh-token",
         value: signInData.session.refresh_token,
@@ -171,7 +223,6 @@ export async function GET(request: NextRequest) {
         sameSite: "lax",
         maxAge: 60 * 60 * 24 * 30,
       });
-
       return response;
     }
 
@@ -233,7 +284,6 @@ export async function GET(request: NextRequest) {
         }
 
         const response = NextResponse.redirect(new URL("/", request.url));
-
         response.cookies.set({
           name: "sb-access-token",
           value: signInData.session.access_token,
@@ -243,7 +293,6 @@ export async function GET(request: NextRequest) {
           sameSite: "lax",
           maxAge: 60 * 60 * 24 * 7,
         });
-
         response.cookies.set({
           name: "sb-refresh-token",
           value: signInData.session.refresh_token,
@@ -253,7 +302,6 @@ export async function GET(request: NextRequest) {
           sameSite: "lax",
           maxAge: 60 * 60 * 24 * 30,
         });
-
         return response;
       }
 
@@ -296,7 +344,6 @@ export async function GET(request: NextRequest) {
     }
 
     const response = NextResponse.redirect(new URL("/", request.url));
-
     response.cookies.set({
       name: "sb-access-token",
       value: signInData.session.access_token,
@@ -306,7 +353,6 @@ export async function GET(request: NextRequest) {
       sameSite: "lax",
       maxAge: 60 * 60 * 24 * 7,
     });
-
     response.cookies.set({
       name: "sb-refresh-token",
       value: signInData.session.refresh_token,
@@ -316,7 +362,6 @@ export async function GET(request: NextRequest) {
       sameSite: "lax",
       maxAge: 60 * 60 * 24 * 30,
     });
-
     return response;
   } catch (error) {
     console.error("Error in Steam callback:", error);
