@@ -1,3 +1,4 @@
+// src/app/actions/ai.ts
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
@@ -7,6 +8,9 @@ import {
   streamAIChat,
   UserGameContext,
 } from "@/lib/ai/gemini";
+
+// NOTE: These server actions are kept for backward compatibility
+// New code should use the API endpoints directly via /api/recommendations
 
 export async function getRecommendations(
   userQuery: string = "What should I play next?",
@@ -122,5 +126,71 @@ export async function getChatStream(message: string) {
   } catch (error) {
     console.error("Chat stream error:", error);
     throw error;
+  }
+}
+
+// New utility function for direct API usage
+export async function getRecommendationsFromAPI(
+  query?: string,
+  limit?: number,
+  backlogOnly?: boolean,
+) {
+  try {
+    const params = new URLSearchParams();
+    if (query) params.append("query", query);
+    if (limit) params.append("limit", limit.toString());
+    if (backlogOnly) params.append("backlogOnly", "true");
+
+    const response = await fetch(
+      `/api/recommendations${params.toString() ? `?${params.toString()}` : ""}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      },
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      return { error: error.error || "Failed to get recommendations" };
+    }
+
+    const data = await response.json();
+    return { success: true, ...data };
+  } catch (error) {
+    console.error("Recommendations API error:", error);
+    return { error: "Failed to get recommendations" };
+  }
+}
+
+export async function generateCustomRecommendations(
+  query: string,
+  limit?: number,
+  includeBacklogOnly?: boolean,
+) {
+  try {
+    const response = await fetch("/api/recommendations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query,
+        limit,
+        includeBacklogOnly,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return { error: error.error || "Failed to generate recommendations" };
+    }
+
+    const data = await response.json();
+    return { success: true, ...data };
+  } catch (error) {
+    console.error("Generate recommendations error:", error);
+    return { error: "Failed to generate recommendations" };
   }
 }

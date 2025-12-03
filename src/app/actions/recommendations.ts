@@ -1,3 +1,4 @@
+// src/app/actions/recommendations.ts
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
@@ -14,6 +15,9 @@ export interface TopRecommendation {
   estimatedPlaytime: string;
   isBestPick: boolean;
 }
+
+// NOTE: This function is kept for backward compatibility
+// New code should use /api/recommendations endpoint
 
 async function generateRecommendations(
   games: any[],
@@ -192,4 +196,55 @@ export async function getCachedTop3Recommendations(): Promise<{
   };
 
   return result;
+}
+
+// New utility functions using API endpoints
+export async function getRecommendationsFromAPI(
+  query?: string,
+  limit: number = 5,
+  backlogOnly: boolean = true,
+): Promise<{
+  recommendations: TopRecommendation[];
+  error?: string;
+}> {
+  try {
+    const params = new URLSearchParams();
+    if (query) params.append("query", query);
+    params.append("limit", limit.toString());
+    params.append("backlogOnly", backlogOnly.toString());
+
+    const response = await fetch(`/api/recommendations?${params.toString()}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      return { recommendations: [], error: error.error };
+    }
+
+    const data = await response.json();
+
+    // Map API response to TopRecommendation format
+    const recommendations = data.data.map((rec: any, idx: number) => ({
+      ...rec,
+      isBestPick: idx === 0,
+    }));
+
+    return { recommendations };
+  } catch (error) {
+    console.error("API error:", error);
+    return { recommendations: [], error: "Failed to get recommendations" };
+  }
+}
+
+export async function refreshRecommendations(): Promise<{
+  recommendations: TopRecommendation[];
+  error?: string;
+}> {
+  // Clear cache and get fresh recommendations
+  cachedRecommendations = null;
+  return await getCachedTop3Recommendations();
 }

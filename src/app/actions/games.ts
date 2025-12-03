@@ -1,3 +1,4 @@
+// src/app/actions/games.ts
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
@@ -22,6 +23,9 @@ const updateGameSchema = z.object({
   liked_aspects: z.array(z.string()).nullable().optional(),
   disliked_aspects: z.array(z.string()).nullable().optional(),
 });
+
+// NOTE: These server actions are kept for backward compatibility
+// New code should use the API endpoints directly via /api/games
 
 export async function syncSteamLibrary() {
   try {
@@ -251,5 +255,68 @@ export async function addGameToLibrary(appid: number, name: string) {
   } catch (error) {
     console.error("Add game error:", error);
     return { error: "Failed to add game" };
+  }
+}
+
+// New utility functions using API client pattern
+export async function bulkUpdateGames(
+  gameIds: string[],
+  updates: {
+    status?: "backlog" | "playing" | "completed" | "dropped" | "shelved";
+    is_favorite?: boolean;
+  },
+) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { error: "Unauthorized" };
+    }
+
+    const supabase = await createClient();
+
+    const { data: games, error } = await supabase
+      .from("user_games")
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", gameIds)
+      .eq("user_id", session.user.id)
+      .select();
+
+    if (error) {
+      return { error: "Failed to update games" };
+    }
+
+    revalidatePath("/library");
+    return { success: true, updated: games?.length || 0 };
+  } catch (error) {
+    return { error: "Failed to update games" };
+  }
+}
+
+export async function bulkDeleteGames(gameIds: string[]) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return { error: "Unauthorized" };
+    }
+
+    const supabase = await createClient();
+
+    const { error } = await supabase
+      .from("user_games")
+      .delete()
+      .in("id", gameIds)
+      .eq("user_id", session.user.id);
+
+    if (error) {
+      return { error: "Failed to delete games" };
+    }
+
+    revalidatePath("/library");
+    return { success: true, deleted: gameIds.length };
+  } catch (error) {
+    return { error: "Failed to delete games" };
   }
 }
