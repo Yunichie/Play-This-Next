@@ -1,4 +1,3 @@
-// src/app/actions/ai.ts
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
@@ -9,8 +8,7 @@ import {
   UserGameContext,
 } from "@/lib/ai/gemini";
 
-// NOTE: These server actions are kept for backward compatibility
-// New code should use the API endpoints directly via /api/recommendations
+// backward compat
 
 export async function getRecommendations(
   userQuery: string = "What should I play next?",
@@ -38,7 +36,6 @@ export async function getRecommendations(
 
     const genreMap = new Map<string, number>();
 
-    // For now, use playtime as a proxy for preference
     games.forEach((game) => {
       if (game.playtime_forever > 0) {
         genreMap.set(
@@ -129,7 +126,6 @@ export async function getChatStream(message: string) {
   }
 }
 
-// New utility function for direct API usage
 export async function getRecommendationsFromAPI(
   query?: string,
   limit?: number,
