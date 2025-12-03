@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,12 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Clock, Star, Trash2 } from "lucide-react";
+import { Clock, Star, Trash2, Trophy } from "lucide-react";
 import { formatPlaytime } from "@/lib/utils";
 import { updateGame, deleteGame } from "@/app/actions/games";
+import { getGameAchievements } from "@/app/actions/steam";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import type { Database } from "@/lib/supabase/database.types";
+import type { SteamAchievement } from "@/lib/steam/api";
 import {
   Select,
   SelectContent,
@@ -49,6 +51,24 @@ export function GameDetailModal({
   const [dislikedAspects, setDislikedAspects] = useState<string>(
     game.disliked_aspects?.join(", ") || "",
   );
+  const [achievements, setAchievements] = useState<
+    (SteamAchievement & { percent: number; achieved: boolean; unlocktime: number })[]
+  >([]);
+  const [loadingAchievements, setLoadingAchievements] = useState(false);
+  const [showAchievements, setShowAchievements] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && game.appid) {
+      setLoadingAchievements(true);
+      getGameAchievements(game.appid)
+        .then((res) => {
+          if (res.achievements) {
+            setAchievements(res.achievements);
+          }
+        })
+        .finally(() => setLoadingAchievements(false));
+    }
+  }, [isOpen, game.appid]);
 
   const handleSave = async () => {
     setLoading(true);
@@ -113,19 +133,179 @@ export function GameDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{game.name}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
-          {/* Game Image */}
-          <div className="relative aspect-video rounded-lg overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 overflow-hidden">
+          {/* Left Column: Achievements - Desktop Only */}
+          <div className="hidden lg:flex lg:col-span-1 border-r pr-4 flex-col overflow-hidden">
+            <h3 className="font-semibold flex items-center gap-2 mb-4">
+              <Trophy className="w-4 h-4" />
+              Achievements
+            </h3>
+            {loadingAchievements ? (
+              <div className="text-sm text-muted-foreground">
+                Loading achievements...
+              </div>
+            ) : achievements.length > 0 ? (
+              <div className="flex-1 overflow-y-auto pr-2 space-y-3">
+                {achievements.map((ach) => (
+                  <div
+                    key={ach.name}
+                    className="flex gap-2 items-center p-2 rounded-lg bg-muted/50"
+                  >
+                    {/* Checkmark Column */}
+                    <div className="flex-shrink-0 w-5 flex items-center justify-center">
+                      {ach.achieved && (
+                        <svg
+                          className="w-5 h-5 text-muted-foreground"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                        </svg>
+                      )}
+                    </div>
+                    {/* Icon */}
+                    <img
+                      src={ach.achieved ? ach.icon : ach.icongray}
+                      alt={ach.displayName}
+                      className="w-10 h-10 rounded flex-shrink-0"
+                    />
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div
+                        className="font-medium text-sm truncate"
+                        title={ach.displayName}
+                      >
+                        {ach.displayName}
+                      </div>
+                      <div
+                        className="text-xs text-muted-foreground line-clamp-2"
+                        title={ach.description}
+                      >
+                        {ach.description}
+                      </div>
+                      <div className="mt-1.5 h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary"
+                          style={{ width: `${ach.percent}%` }}
+                        />
+                      </div>
+                      <div className="text-[10px] text-right text-muted-foreground mt-0.5">
+                        {ach.percent.toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                No achievements found.
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Existing Content */}
+          <div className="lg:col-span-2 space-y-6 overflow-y-auto p-2">
+            {/* Game Image */}
+            <div className="relative aspect-video rounded-lg overflow-hidden">
             <img
               src={game.img_url || "/placeholder-game.jpg"}
               alt={game.name}
               className="object-cover w-full h-full"
             />
+          </div>
+
+          {/* Mobile Achievements Toggle Button */}
+          <div className="lg:hidden">
+            <Button
+              variant="outline"
+              onClick={() => setShowAchievements(!showAchievements)}
+              className="w-full flex items-center justify-between"
+            >
+              <span className="flex items-center gap-2">
+                <Trophy className="w-4 h-4" />
+                Achievements
+              </span>
+              <svg
+                className={`w-4 h-4 transition-transform ${showAchievements ? 'rotate-180' : ''}`}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </Button>
+            
+            {showAchievements && (
+              <div className="mt-4 space-y-3 max-h-96 overflow-y-auto">
+                {loadingAchievements ? (
+                  <div className="text-sm text-muted-foreground">
+                    Loading achievements...
+                  </div>
+                ) : achievements.length > 0 ? (
+                  achievements.map((ach) => (
+                    <div
+                      key={ach.name}
+                      className="flex gap-2 items-center p-2 rounded-lg bg-muted/50"
+                    >
+                      {/* Checkmark Column */}
+                      <div className="flex-shrink-0 w-5 flex items-center justify-center">
+                        {ach.achieved && (
+                          <svg
+                            className="w-5 h-5 text-muted-foreground"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+                          </svg>
+                        )}
+                      </div>
+                      {/* Icon */}
+                      <img
+                        src={ach.achieved ? ach.icon : ach.icongray}
+                        alt={ach.displayName}
+                        className="w-10 h-10 rounded flex-shrink-0"
+                      />
+                      {/* Content */}
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className="font-medium text-sm truncate"
+                          title={ach.displayName}
+                        >
+                          {ach.displayName}
+                        </div>
+                        <div
+                          className="text-xs text-muted-foreground line-clamp-2"
+                          title={ach.description}
+                        >
+                          {ach.description}
+                        </div>
+                        <div className="mt-1.5 h-1.5 w-full bg-secondary rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary"
+                            style={{ width: `${ach.percent}%` }}
+                          />
+                        </div>
+                        <div className="text-[10px] text-right text-muted-foreground mt-0.5">
+                          {ach.percent.toFixed(1)}%
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-muted-foreground">
+                    No achievements found.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Stats */}
@@ -215,24 +395,25 @@ export function GameDetailModal({
             />
           </div>
 
-          {}
-          <div className="flex justify-between pt-4">
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={loading}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Remove from Library
-            </Button>
+            {/* Footer Buttons */}
+            <div className="flex justify-between pt-4">
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={loading}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Remove from Library
+              </Button>
 
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={onClose} disabled={loading}>
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={loading}>
-                {loading ? "Saving..." : "Save Changes"}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={onClose} disabled={loading}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} disabled={loading}>
+                  {loading ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
             </div>
           </div>
         </div>

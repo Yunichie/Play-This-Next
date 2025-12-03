@@ -4,6 +4,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import {
+  getGameSchema,
+  getGlobalAchievementPercentages,
+  getPlayerAchievements,
+} from "@/lib/steam/api";
 
 // NOTE: These server actions are kept for backward compatibility
 // Profile-related actions could use /api/profile endpoint in new code
@@ -207,5 +212,53 @@ export async function syncSteamLibraryViaAPI() {
   } catch (error) {
     console.error("Sync library error:", error);
     return { error: "Failed to sync library" };
+  }
+}
+
+export async function getGameAchievements(appid: number) {
+  try {
+    const session = await auth();
+    let steamid: string | null = null;
+
+    if (session?.user?.id) {
+      const supabase = await createClient();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("steamid")
+        .eq("user_id", session.user.id)
+        .single();
+
+      steamid = profile?.steamid || null;
+    }
+
+    const [schema, percentages, playerAchievements] = await Promise.all([
+      getGameSchema(appid),
+      getGlobalAchievementPercentages(appid),
+      steamid ? getPlayerAchievements(steamid, appid) : Promise.resolve([]),
+    ]);
+
+    if (!schema?.game?.availableGameStats?.achievements) {
+      return { achievements: [] };
+    }
+
+    const achievements = schema.game.availableGameStats.achievements.map(
+      (ach) => {
+        const percentage = percentages.find((p) => p.name === ach.name);
+        const playerAch = playerAchievements.find(
+          (p) => p.apiname === ach.name,
+        );
+        return {
+          ...ach,
+          percent: percentage ? parseFloat(percentage.percent.toString()) : 0,
+          achieved: playerAch ? playerAch.achieved === 1 : false,
+          unlocktime: playerAch?.unlocktime || 0,
+        };
+      },
+    );
+
+    return { achievements };
+  } catch (error) {
+    console.error("Error fetching game achievements:", error);
+    return { error: "Failed to fetch achievements" };
   }
 }

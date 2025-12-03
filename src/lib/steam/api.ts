@@ -110,3 +110,121 @@ export function getSteamImageUrl(
 export function getSteamHeaderUrl(appid: number): string {
   return `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`;
 }
+
+export interface SteamAchievement {
+  name: string;
+  defaultvalue: number;
+  displayName: string;
+  hidden: number;
+  description: string;
+  icon: string;
+  icongray: string;
+}
+
+export interface SteamGameSchema {
+  game: {
+    gameName: string;
+    gameVersion: string;
+    availableGameStats: {
+      achievements: SteamAchievement[];
+    };
+  };
+}
+
+export interface SteamAchievementPercentage {
+  name: string;
+  percent: number;
+}
+
+export async function getGameSchema(
+  appid: number,
+): Promise<SteamGameSchema | null> {
+  try {
+    const url = new URL(
+      `${STEAM_API_BASE}/ISteamUserStats/GetSchemaForGame/v2/`,
+    );
+    url.searchParams.append("key", STEAM_API_KEY);
+    url.searchParams.append("appid", appid.toString());
+
+    const response = await fetch(url.toString(), {
+      next: { revalidate: 86400 },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("Error fetching game schema:", error);
+    return null;
+  }
+}
+
+export async function getGlobalAchievementPercentages(
+  appid: number,
+): Promise<SteamAchievementPercentage[]> {
+  try {
+    const url = new URL(
+      `${STEAM_API_BASE}/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/`,
+    );
+    url.searchParams.append("gameid", appid.toString());
+
+    const response = await fetch(url.toString(), {
+      next: { revalidate: 86400 },
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data = await response.json();
+    return data.achievementpercentages?.achievements || [];
+  } catch (error) {
+    console.error("Error fetching global achievement percentages:", error);
+    return [];
+  }
+}
+
+export interface PlayerAchievement {
+  apiname: string;
+  achieved: number;
+  unlocktime: number;
+}
+
+export interface PlayerAchievementsResponse {
+  playerstats: {
+    steamID: string;
+    gameName: string;
+    achievements: PlayerAchievement[];
+  };
+}
+
+export async function getPlayerAchievements(
+  steamid: string,
+  appid: number,
+): Promise<PlayerAchievement[]> {
+  try {
+    const url = new URL(
+      `${STEAM_API_BASE}/ISteamUserStats/GetPlayerAchievements/v1/`,
+    );
+    url.searchParams.append("key", STEAM_API_KEY);
+    url.searchParams.append("steamid", steamid);
+    url.searchParams.append("appid", appid.toString());
+
+    const response = await fetch(url.toString(), {
+      next: { revalidate: 300 },
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const data: PlayerAchievementsResponse = await response.json();
+    return data.playerstats?.achievements || [];
+  } catch (error) {
+    console.error("Error fetching player achievements:", error);
+    return [];
+  }
+}
