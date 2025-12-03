@@ -1,4 +1,3 @@
-// src/app/actions/games.ts
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
@@ -24,8 +23,7 @@ const updateGameSchema = z.object({
   disliked_aspects: z.array(z.string()).nullable().optional(),
 });
 
-// NOTE: These server actions are kept for backward compatibility
-// New code should use the API endpoints directly via /api/games
+// backward compat
 
 export async function syncSteamLibrary() {
   try {
@@ -258,7 +256,6 @@ export async function addGameToLibrary(appid: number, name: string) {
   }
 }
 
-// New utility functions using API client pattern
 export async function bulkUpdateGames(
   gameIds: string[],
   updates: {

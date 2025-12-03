@@ -1,12 +1,10 @@
-// src/app/actions/steam.ts
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 
-// NOTE: These server actions are kept for backward compatibility
-// Profile-related actions could use /api/profile endpoint in new code
+// backward compat
 
 export async function linkSteamAccount(
   steamId: string,
@@ -21,7 +19,6 @@ export async function linkSteamAccount(
 
     const supabase = await createClient();
 
-    // Check if Steam account is already linked to another user
     const { data: existingProfile } = await supabase
       .from("profiles")
       .select("user_id")
@@ -111,7 +108,6 @@ export async function checkSteamLinkStatus() {
   }
 }
 
-// New utility functions using API pattern
 export async function updateProfileViaAPI(data: {
   username?: string;
   avatar_url?: string;
